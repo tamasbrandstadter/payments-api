@@ -10,7 +10,7 @@ import (
 const (
 	accounts      = "/accounts"
 	accountById   = "/accounts/{id}"
-	//freezeAccount = "/accounts/{id}/freeze"
+	freezeAccount = "/accounts/{id}/freeze"
 )
 
 type Application struct {
@@ -29,10 +29,10 @@ func NewApplication(db *sqlx.DB) *Application {
 
 	router := mux.NewRouter()
 	router.HandleFunc(accountById, app.GetAccountById).Methods("GET")
-	router.HandleFunc(accounts, app.FindAll).Methods("GET")
+	router.HandleFunc(accounts, app.FindAllAccounts).Methods("GET")
 	router.HandleFunc(accounts, app.CreateAccountForCustomer).Methods("POST")
-	//router.HandleFunc(accountById, accounts.Delete).Methods("DELETE")
-	//router.HandleFunc(freezeAccount, accounts.Freeze).Methods("PUT")
+	router.HandleFunc(accountById, app.DeleteAccountById).Methods("DELETE")
+	router.HandleFunc(freezeAccount, app.Freeze).Methods("PUT")
 
 	app.handler = router
 	return &app

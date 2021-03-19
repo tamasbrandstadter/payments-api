@@ -21,28 +21,28 @@ func (a *Application) GetAccountById(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.Atoi(params["id"])
 	if err != nil {
-		web.RespondError(w, http.StatusBadRequest, "Unable to parse account id")
+		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
 		return
 	}
 
 	acc, err := account.SelectById(a.DB, id)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("%d account id is not found", id))
+			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("account id %d is not found", id))
 			return
 		}
 
-		web.RespondError(w, http.StatusInternalServerError, "Unable to find account")
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to find account: %s", err.Error()))
 		return
 	}
 
 	web.Respond(w, http.StatusOK, acc)
 }
 
-func (a *Application) FindAll(w http.ResponseWriter, _ *http.Request) {
+func (a *Application) FindAllAccounts(w http.ResponseWriter, _ *http.Request) {
 	accounts, err := account.SelectAll(a.DB)
 	if err != nil {
-		web.RespondError(w, http.StatusInternalServerError, "Unable to retrieve accounts")
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to retrieve accounts: %s", err.Error()))
 		return
 	}
 
@@ -56,14 +56,14 @@ func (a *Application) FindAll(w http.ResponseWriter, _ *http.Request) {
 func (a *Application) CreateAccountForCustomer(w http.ResponseWriter, r *http.Request) {
 	var payload account.CreateAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		web.RespondError(w, http.StatusBadRequest, "Unable to unmarshal customer request payload")
+		web.RespondError(w, http.StatusBadRequest, "invalid request payload, unable to parse")
 		return
 	}
 	defer r.Body.Close()
 
 	// custom validation
 	if payload.FirstName == "" || payload.LastName == "" {
-		web.RespondError(w, http.StatusBadRequest, "firstName and lastName are required fields")
+		web.RespondError(w, http.StatusBadRequest, "firstname and lastname are required fields")
 		return
 	}
 	if !payload.Currency.Supported() {
@@ -76,19 +76,64 @@ func (a *Application) CreateAccountForCustomer(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		if pgErr, ok := errors.Cause(err).(*pq.Error); ok {
 			if string(pgErr.Code) == db.PSQLErrUniqueConstraint {
-				web.RespondError(w, http.StatusBadRequest, fmt.Sprintf("%s taken, specify another one", payload.Email))
+				web.RespondError(w, http.StatusBadRequest, fmt.Sprintf("%s is taken, specify another one", payload.Email))
 				return
 			}
 		}
-		web.RespondError(w, http.StatusInternalServerError, "Unable to insert customer")
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to insert customer: %s", err.Error()))
 		return
 	}
 
 	// account creation
 	acc, err := account.Create(a.DB, c.ID, payload)
 	if err != nil {
-		web.RespondError(w, http.StatusInternalServerError, "Unable to insert account")
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to insert account: %s", err.Error()))
 	}
 
 	web.Respond(w, http.StatusCreated, acc)
+}
+
+func (a *Application) DeleteAccountById(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	id, err := strconv.Atoi(params["id"])
+	if err != nil {
+		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
+		return
+	}
+
+	if err = account.Delete(a.DB, id); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("%d account id is not found", id))
+			return
+		}
+
+		web.RespondError(w, http.StatusInternalServerError,fmt.Sprintf("unable to delete account: %s", err.Error()))
+		return
+	}
+
+	web.Respond(w, http.StatusNoContent, nil)
+}
+
+func (a *Application) Freeze(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	id, err := strconv.Atoi(params["id"])
+	if err != nil {
+		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
+		return
+	}
+
+	acc, err := account.Freeze(a.DB, id)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("%d account id is not found", id))
+			return
+		}
+
+		web.RespondError(w, http.StatusInternalServerError,fmt.Sprintf("unable to delete account: %s", err.Error()))
+		return
+	}
+
+	web.Respond(w, http.StatusOK, acc)
 }

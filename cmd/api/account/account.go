@@ -1,6 +1,7 @@
 package account
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -86,5 +87,46 @@ func Create(dbc *sqlx.DB, customerId int, ar CreateAccountRequest) (Account, err
 		return Account{}, errors.Wrap(err, "get inserted row id for account")
 	}
 
+	return acc, nil
+}
+
+func Delete(dbc *sqlx.DB, id int) error {
+	if _, err := SelectById(dbc, id); errors.Cause(err) == sql.ErrNoRows {
+		return sql.ErrNoRows
+	}
+
+	if _, err := dbc.Exec(deleteById, id); err != nil {
+		return errors.Wrap(err, "delete account row")
+	}
+
+	return nil
+}
+
+func Freeze(dbc *sqlx.DB, id int) (Account, error) {
+	acc, err := SelectById(dbc, id)
+	if errors.Cause(err) == sql.ErrNoRows {
+		return Account{}, sql.ErrNoRows
+	}
+
+	modifiedAt := time.Now().UTC()
+
+	stmt, err := dbc.Prepare(freezeById)
+	if err != nil {
+		return Account{}, errors.Wrap(err, "freeze account row")
+	}
+
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			logrus.WithError(errors.Wrap(err, "close psql statement")).Info("freeze account")
+		}
+	}()
+
+	if err = stmt.QueryRow(modifiedAt, id).Err(); err != nil {
+		return Account{}, errors.Wrap(err, "get inserted row id for account freeze")
+	}
+
+	acc.ModifiedAt = modifiedAt
+	acc.Frozen = true
+	
 	return acc, nil
 }

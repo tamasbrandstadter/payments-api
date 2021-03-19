@@ -19,12 +19,13 @@ type Customer struct {
 }
 
 func Create(dbc *sqlx.DB, ar account.CreateAccountRequest) (Customer, error) {
-	var c Customer
-	c.FirstName = ar.FirstName
-	c.LastName = ar.LastName
-	c.Email = ar.Email
-	c.CreatedAt = time.Now()
-	c.ModifiedAt = time.Now()
+	c := Customer{
+		FirstName:  ar.FirstName,
+		LastName:   ar.LastName,
+		Email:      ar.Email,
+		CreatedAt:  time.Now().UTC(),
+		ModifiedAt: time.Now().UTC(),
+	}
 
 	stmt, err := dbc.Prepare(insert)
 	if err != nil {
