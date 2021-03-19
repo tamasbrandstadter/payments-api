@@ -30,7 +30,7 @@ func NewApplication(db *sqlx.DB) *Application {
 	router := mux.NewRouter()
 	router.HandleFunc(accountById, app.GetAccountById).Methods("GET")
 	router.HandleFunc(accounts, app.FindAll).Methods("GET")
-	//router.HandleFunc(accounts, accounts.CreateAccountForCustomer).Methods("POST")
+	router.HandleFunc(accounts, app.CreateAccountForCustomer).Methods("POST")
 	//router.HandleFunc(accountById, accounts.Delete).Methods("DELETE")
 	//router.HandleFunc(freezeAccount, accounts.Freeze).Methods("PUT")
 

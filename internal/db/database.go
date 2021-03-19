@@ -9,6 +9,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var PSQLErrUniqueConstraint = "23505"
+
 type Config struct {
 	User string
 	Pass string

@@ -1,19 +1,17 @@
 package account
 
 import (
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type Currency string
 
-type Customer struct {
-	ID        int       `json:"id" db:"id"`
-	FirstName string    `json:"firstName" db:"first_name"`
-	LastName  string    `json:"lastName" db:"last_name"`
+func (c Currency) Supported() bool {
+	return c == "EUR" || c == "GBP" || c == "USD"
 }
 
 type Account struct {
@@ -22,6 +20,7 @@ type Account struct {
 	Balance    float64   `json:"balance" db:"balance"`
 	Currency   Currency  `json:"currency,omitempty" db:"currency"`
 	CreatedAt  time.Time `json:"createdAt" db:"created_at"`
+	ModifiedAt time.Time `json:"modifiedAt" db:"modified_at"`
 	Frozen     bool      `json:"frozen" db:"frozen"`
 }
 
@@ -55,6 +54,36 @@ func SelectById(dbc *sqlx.DB, id int) (Account, error) {
 
 	if err := row.StructScan(&acc); err != nil {
 		return Account{}, errors.Wrap(err, "select singular row from account table")
+	}
+
+	return acc, nil
+}
+
+func Create(dbc *sqlx.DB, customerId int, ar CreateAccountRequest) (Account, error) {
+	acc := Account{
+		CustomerID: customerId,
+		Balance:    ar.InitialBalance,
+		Currency:   ar.Currency,
+		CreatedAt:  time.Now().UTC(),
+		ModifiedAt: time.Now().UTC(),
+		Frozen:     false,
+	}
+
+	stmt, err := dbc.Prepare(insert)
+	if err != nil {
+		return Account{}, errors.Wrap(err, "insert new account row")
+	}
+
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			logrus.WithError(errors.Wrap(err, "close psql statement")).Info("create account")
+		}
+	}()
+
+	row := stmt.QueryRow(acc.CustomerID, acc.Balance, acc.Currency, acc.CreatedAt, acc.ModifiedAt)
+
+	if err = row.Scan(&acc.ID); err != nil {
+		return Account{}, errors.Wrap(err, "get inserted row id for account")
 	}
 
 	return acc, nil
