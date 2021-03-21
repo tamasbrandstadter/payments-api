@@ -3,14 +3,14 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
+	"github.com/julienschmidt/httprouter"
 )
 
 const (
 	accounts      = "/accounts"
-	accountById   = "/accounts/{id}"
-	freezeAccount = "/accounts/{id}/freeze"
+	accountById   = "/accounts/:id"
+	freezeAccount = "/accounts/:id/freeze"
 )
 
 type Application struct {
@@ -27,12 +27,12 @@ func NewApplication(db *sqlx.DB) *Application {
 		DB: db,
 	}
 
-	router := mux.NewRouter()
-	router.HandleFunc(accountById, app.GetAccountById).Methods("GET")
-	router.HandleFunc(accounts, app.FindAllAccounts).Methods("GET")
-	router.HandleFunc(accounts, app.CreateAccountForCustomer).Methods("POST")
-	router.HandleFunc(accountById, app.DeleteAccountById).Methods("DELETE")
-	router.HandleFunc(freezeAccount, app.Freeze).Methods("PUT")
+	router := httprouter.New()
+	router.HandlerFunc(http.MethodGet, accountById, app.GetAccountById)
+	router.HandlerFunc(http.MethodGet, accounts, app.FindAllAccounts)
+	router.HandlerFunc(http.MethodPost, accounts, app.CreateAccountForCustomer)
+	router.HandlerFunc(http.MethodDelete, accountById, app.DeleteAccountById)
+	router.HandlerFunc(http.MethodPut, freezeAccount, app.Freeze)
 
 	app.handler = router
 	return &app

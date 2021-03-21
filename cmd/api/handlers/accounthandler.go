@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gorilla/mux"
+	"github.com/julienschmidt/httprouter"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
@@ -17,9 +17,7 @@ import (
 )
 
 func (a *Application) GetAccountById(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-
-	id, err := strconv.Atoi(params["id"])
+	id, err := strconv.Atoi(httprouter.ParamsFromContext(r.Context()).ByName("id"))
 	if err != nil {
 		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
 		return
@@ -94,9 +92,7 @@ func (a *Application) CreateAccountForCustomer(w http.ResponseWriter, r *http.Re
 }
 
 func (a *Application) DeleteAccountById(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-
-	id, err := strconv.Atoi(params["id"])
+	id, err := strconv.Atoi(httprouter.ParamsFromContext(r.Context()).ByName("id"))
 	if err != nil {
 		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
 		return
@@ -116,9 +112,7 @@ func (a *Application) DeleteAccountById(w http.ResponseWriter, r *http.Request) 
 }
 
 func (a *Application) Freeze(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-
-	id, err := strconv.Atoi(params["id"])
+	id, err := strconv.Atoi(httprouter.ParamsFromContext(r.Context()).ByName("id"))
 	if err != nil {
 		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
 		return
