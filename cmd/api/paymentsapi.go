@@ -20,9 +20,9 @@ func main()  {
 	log.SetFormatter(&log.TextFormatter{TimestampFormat: time.RFC3339, FullTimestamp: true})
 
 	var cfg struct {
-		DBUser string `envconfig:"DB_USER" default:"root"`
-		DBPass string `envconfig:"DB_PASSWORD" default:"root"`
-		DBName string `envconfig:"DB_NAME" default:"list"`
+		DBUser string `envconfig:"DB_USER"`
+		DBPass string `envconfig:"DB_PASSWORD"`
+		DBName string `envconfig:"DB_NAME"`
 		DBPort int    `envconfig:"DB_PORT" default:"5432"`
 
 		ReadTimeout     time.Duration `envconfig:"READ_TIMEOUT" default:"5s"`

@@ -6,7 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 type Currency string
@@ -47,7 +47,7 @@ func SelectById(dbc *sqlx.DB, id int) (Account, error) {
 
 	defer func() {
 		if err := pStmt.Close(); err != nil {
-			logrus.WithError(errors.Wrap(err, "close psql statement")).Info("select account")
+			log.WithError(errors.Wrap(err, "close psql statement")).Info("select account")
 		}
 	}()
 
@@ -77,7 +77,7 @@ func Create(dbc *sqlx.DB, customerId int, ar CreateAccountRequest) (Account, err
 
 	defer func() {
 		if err := stmt.Close(); err != nil {
-			logrus.WithError(errors.Wrap(err, "close psql statement")).Info("create account")
+			log.WithError(errors.Wrap(err, "close psql statement")).Info("create account")
 		}
 	}()
 
@@ -117,7 +117,7 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 
 	defer func() {
 		if err := stmt.Close(); err != nil {
-			logrus.WithError(errors.Wrap(err, "close psql statement")).Info("freeze account")
+			log.WithError(errors.Wrap(err, "close psql statement")).Info("freeze account")
 		}
 	}()
 
@@ -127,6 +127,6 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 
 	acc.ModifiedAt = modifiedAt
 	acc.Frozen = true
-	
+
 	return acc, nil
 }
