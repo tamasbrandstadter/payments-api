@@ -1,4 +1,4 @@
-package tests
+package handlers
 
 import (
 	"encoding/json"
@@ -22,7 +22,7 @@ var expectedAcc = &account.Account{
 	Frozen:     false,
 }
 
-func TestAccount_SelectById(t *testing.T) {
+func TestGetAccountById(t *testing.T) {
 	err := testdb.SaveCustomerWithAccount(a.DB)
 	if err != nil {
 		t.Errorf("error creating test customer with account: %v", err)
@@ -52,7 +52,7 @@ func TestAccount_SelectById(t *testing.T) {
 	}
 }
 
-func TestAccount_SelectById_NotFound(t *testing.T) {
+func TestGetAccountByIdNotFound(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/accounts/%d", 2), nil)
 	if err != nil {
 		t.Errorf("error creating request: %v", err)

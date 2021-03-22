@@ -29,16 +29,6 @@ func Open() (*sqlx.DB, error) {
 	})
 }
 
-func DeleteCustomerWithAccount(dbc *sqlx.DB) error {
-	stmt := "DELETE FROM accounts WHERE NOT EXISTS(SELECT * FROM customers AS T1 WHERE T1.id == accounts.customer_id);"
-
-	if _, err := dbc.Exec(stmt); err != nil {
-		return errors.Wrap(err, "delete account with customer")
-	}
-
-	return nil
-}
-
 func SaveCustomerWithAccount(dbc *sqlx.DB) error {
 	stmt, err := dbc.Prepare("INSERT INTO customers(first_name, last_name, email, created_at, modified_at) VALUES($1,$2,$3,$4,$5) RETURNING id;")
 	if err != nil {

@@ -1,4 +1,4 @@
-package tests
+package customer
 
 import (
 	"testing"
@@ -11,13 +11,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
-	"github.com/tamasbrandstadter/payments-api/cmd/api/customer"
 )
 
 var (
 	id               = int(uuid.New().ID())
 	createdAt        = time.Now().UTC()
-	expectedCustomer = &customer.Customer{
+	expectedCustomer = &Customer{
 		ID:         id,
 		FirstName:  "first",
 		LastName:   "last",
@@ -27,7 +26,7 @@ var (
 	}
 )
 
-func TestCustomer_Create(t *testing.T) {
+func TestCreate(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -44,7 +43,7 @@ func TestCustomer_Create(t *testing.T) {
 	mock.ExpectPrepare(query).ExpectQuery().WithArgs(request.FirstName, request.LastName, request.Email, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(rows)
 
-	actualCustomer, err := customer.Create(db, request)
+	actualCustomer, err := Create(db, request)
 
 	assert.NoError(t, err)
 
@@ -57,7 +56,7 @@ func TestCustomer_Create(t *testing.T) {
 	assert.NotNil(t, actualCustomer.ModifiedAt)
 }
 
-func TestCustomer_Create_Error(t *testing.T) {
+func TestCreateCustomerError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -71,7 +70,7 @@ func TestCustomer_Create_Error(t *testing.T) {
 		Email:     "first@last.com",
 	}
 
-	_, err := customer.Create(db, request)
+	_, err := Create(db, request)
 
 	assert.Error(t, err)
 }

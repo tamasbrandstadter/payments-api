@@ -1,15 +1,14 @@
-package tests
+package handlers
 
 import (
 	"os"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/tamasbrandstadter/payments-api/cmd/api/handlers"
 	"github.com/tamasbrandstadter/payments-api/internal/testdb"
 )
 
-var a *handlers.Application
+var a *Application
 
 func TestMain(m *testing.M) {
 	os.Exit(testMain(m))
@@ -23,7 +22,7 @@ func testMain(m *testing.M) int {
 	}
 	defer dbc.Close()
 
-	a = handlers.NewApplication(dbc)
+	a = NewApplication(dbc)
 
 	return m.Run()
 }
