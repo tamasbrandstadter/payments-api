@@ -103,7 +103,7 @@ func TestCreate(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(11)
 
-	request := CreateAccountRequest{
+	request := AccCreationRequest{
 		FirstName:      "first",
 		LastName:       "last",
 		Email:          "first@last.com",
@@ -135,7 +135,7 @@ func TestCreateError(t *testing.T) {
 
 	query := "INSERT INTO accounts\\(customer_id, balance, currency, created_at, modified_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
 
-	request := CreateAccountRequest{
+	request := AccCreationRequest{
 		FirstName:      "first",
 		LastName:       "last",
 		Email:          "first@last.com",

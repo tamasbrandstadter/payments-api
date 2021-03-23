@@ -137,7 +137,7 @@ func TestFindAllAccounts(t *testing.T) {
 }
 
 func TestCreateAccountForCustomer(t *testing.T) {
-	payload := account.CreateAccountRequest{
+	payload := account.AccCreationRequest{
 		FirstName:      "first",
 		LastName:       "last",
 		Email:          "first@last.com",
@@ -213,7 +213,7 @@ func TestCreateAccountForCustomerInvalidPayload(t *testing.T) {
 }
 
 func TestCreateAccountForCustomerErrorInName(t *testing.T) {
-	payload := account.CreateAccountRequest{
+	payload := account.AccCreationRequest{
 		Email:          "first@last.com",
 		InitialBalance: 15,
 		Currency:       account.Currency("GBP"),
@@ -245,7 +245,7 @@ func TestCreateAccountForCustomerErrorInName(t *testing.T) {
 }
 
 func TestCreateAccountForCustomerErrorUnsupportedCurrency(t *testing.T) {
-	payload := account.CreateAccountRequest{
+	payload := account.AccCreationRequest{
 		FirstName:      "first",
 		LastName:       "last",
 		Email:          "first@last.com",
@@ -279,7 +279,7 @@ func TestCreateAccountForCustomerErrorUnsupportedCurrency(t *testing.T) {
 }
 
 func TestCreateAccountForCustomerDuplicateEmail(t *testing.T) {
-	payload := account.CreateAccountRequest{
+	payload := account.AccCreationRequest{
 		FirstName:      "apple",
 		LastName:       "pie",
 		Email:          "first@last.com",
@@ -310,6 +310,40 @@ func TestCreateAccountForCustomerDuplicateEmail(t *testing.T) {
 	}
 
 	assert.Equal(t, "first@last.com is taken, specify another one", response["error"])
+}
+
+func TestCreateAccountForCustomerWithNegativeInitialBalance(t *testing.T) {
+	payload := account.AccCreationRequest{
+		FirstName:      "apple",
+		LastName:       "pie",
+		Email:          "second@second.com",
+		InitialBalance: -1,
+		Currency:       account.Currency("GBP"),
+	}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "/accounts", &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "initial deposit can't be negative", response["error"])
 }
 
 func TestFindAllAccountsAfterCreation(t *testing.T) {

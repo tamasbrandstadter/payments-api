@@ -17,6 +17,7 @@ import (
 )
 
 func (a *Application) GetAccountById(w http.ResponseWriter, r *http.Request) {
+	// request validation
 	id, err := strconv.Atoi(httprouter.ParamsFromContext(r.Context()).ByName("id"))
 	if err != nil {
 		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
@@ -52,7 +53,8 @@ func (a *Application) FindAllAccounts(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (a *Application) CreateAccountForCustomer(w http.ResponseWriter, r *http.Request) {
-	var payload account.CreateAccountRequest
+	// request validation
+	var payload account.AccCreationRequest
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		web.RespondError(w, http.StatusBadRequest, "invalid request payload, unable to parse")
 		return
@@ -66,6 +68,10 @@ func (a *Application) CreateAccountForCustomer(w http.ResponseWriter, r *http.Re
 	}
 	if !payload.Currency.Supported() {
 		web.RespondError(w, http.StatusBadRequest, fmt.Sprintf("%s currency not supported", payload.Currency))
+		return
+	}
+	if payload.InitialBalance < 0 {
+		web.RespondError(w, http.StatusBadRequest, "initial deposit can't be negative")
 		return
 	}
 
@@ -92,6 +98,7 @@ func (a *Application) CreateAccountForCustomer(w http.ResponseWriter, r *http.Re
 }
 
 func (a *Application) DeleteAccountById(w http.ResponseWriter, r *http.Request) {
+	// request validation
 	id, err := strconv.Atoi(httprouter.ParamsFromContext(r.Context()).ByName("id"))
 	if err != nil {
 		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
@@ -104,7 +111,7 @@ func (a *Application) DeleteAccountById(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		web.RespondError(w, http.StatusInternalServerError,fmt.Sprintf("unable to delete account: %s", err.Error()))
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to delete account: %s", err.Error()))
 		return
 	}
 
@@ -112,6 +119,7 @@ func (a *Application) DeleteAccountById(w http.ResponseWriter, r *http.Request) 
 }
 
 func (a *Application) Freeze(w http.ResponseWriter, r *http.Request) {
+	// request validation
 	id, err := strconv.Atoi(httprouter.ParamsFromContext(r.Context()).ByName("id"))
 	if err != nil {
 		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
@@ -125,7 +133,43 @@ func (a *Application) Freeze(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		web.RespondError(w, http.StatusInternalServerError,fmt.Sprintf("unable to freeze account: %s", err.Error()))
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to freeze account: %s", err.Error()))
+		return
+	}
+
+	web.Respond(w, http.StatusOK, acc)
+}
+
+func (a *Application) Deposit(w http.ResponseWriter, r *http.Request) {
+	// request validation
+	id, err := strconv.Atoi(httprouter.ParamsFromContext(r.Context()).ByName("id"))
+	if err != nil {
+		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
+		return
+	}
+
+	var payload account.BalanceOperationRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		web.RespondError(w, http.StatusBadRequest, "invalid request payload, unable to parse")
+		return
+	}
+	defer r.Body.Close()
+
+	// custom validation
+	if payload.Amount < 0 {
+		web.RespondError(w, http.StatusBadRequest, "deposit can't be negative")
+		return
+	}
+
+	acc, err := account.Deposit(a.DB, id, payload.Amount)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("account id %d is not found", id))
+			return
+		}
+
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to to deposit to account %g, error: %s",
+			payload.Amount, err.Error()))
 		return
 	}
 

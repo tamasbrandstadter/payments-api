@@ -58,7 +58,7 @@ func SelectById(dbc *sqlx.DB, id int) (Account, error) {
 	return acc, nil
 }
 
-func Create(dbc *sqlx.DB, customerId int, ar CreateAccountRequest) (Account, error) {
+func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error) {
 	acc := Account{
 		CustomerID: customerId,
 		Balance:    ar.InitialBalance,
@@ -125,6 +125,36 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 
 	acc.ModifiedAt = modifiedAt
 	acc.Frozen = true
+
+	return acc, nil
+}
+
+func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
+	acc, err := SelectById(dbc, id)
+	if errors.Cause(err) == sql.ErrNoRows {
+		return Account{}, sql.ErrNoRows
+	}
+
+	modifiedAt := time.Now().UTC()
+	newBalance := acc.Balance + amount
+
+	stmt, err := dbc.Prepare(deposit)
+	if err != nil {
+		return Account{}, errors.Wrap(err, "deposit to account row")
+	}
+
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			log.WithError(errors.Wrap(err, "close psql statement")).Info("deposit to account")
+		}
+	}()
+
+	if err = stmt.QueryRow(newBalance, modifiedAt, id).Err(); err != nil {
+		return Account{}, errors.Wrap(err, "get inserted row id for deposit")
+	}
+
+	acc.ModifiedAt = modifiedAt
+	acc.Balance = newBalance
 
 	return acc, nil
 }

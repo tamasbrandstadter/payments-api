@@ -18,7 +18,7 @@ type Customer struct {
 	ModifiedAt time.Time `json:"modifiedAt" db:"modified_at"`
 }
 
-func Create(dbc *sqlx.DB, ar account.CreateAccountRequest) (Customer, error) {
+func Create(dbc *sqlx.DB, ar account.AccCreationRequest) (Customer, error) {
 	c := Customer{
 		FirstName:  ar.FirstName,
 		LastName:   ar.LastName,

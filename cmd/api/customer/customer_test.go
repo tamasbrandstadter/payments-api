@@ -35,7 +35,7 @@ func TestCreate(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(id)
 
-	request := account.CreateAccountRequest{
+	request := account.AccCreationRequest{
 		FirstName: "first",
 		LastName:  "last",
 		Email:     "first@last.com",
@@ -65,7 +65,7 @@ func TestCreateCustomerError(t *testing.T) {
 
 	mock.ExpectPrepare(query).WillReturnError(sql.ErrConnDone)
 
-	request := account.CreateAccountRequest{
+	request := account.AccCreationRequest{
 		FirstName: "first",
 		LastName:  "last",
 		Email:     "first@last.com",
