@@ -1,6 +1,7 @@
 package customer
 
 import (
+	"database/sql"
 	"testing"
 	"time"
 
@@ -62,7 +63,7 @@ func TestCreateCustomerError(t *testing.T) {
 
 	query := "INSERT INTO customers\\(first_name, last_name, email, created_at, modified_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
 
-	mock.ExpectPrepare(query).WillReturnError(errors.New("sql: database is closed"))
+	mock.ExpectPrepare(query).WillReturnError(sql.ErrConnDone)
 
 	request := account.CreateAccountRequest{
 		FirstName: "first",
@@ -71,8 +72,9 @@ func TestCreateCustomerError(t *testing.T) {
 	}
 
 	_, err := Create(db, request)
-
-	assert.Error(t, err)
+	if errors.Cause(err) != sql.ErrConnDone {
+		t.Errorf("account deletion test failed err expected sql.ErrConnDone but got: %v:", err)
+	}
 }
 
 func NewMockDb() (*sqlx.DB, sqlmock.Sqlmock) {

@@ -38,9 +38,7 @@ func SelectAll(dbc *sqlx.DB) ([]Account, error) {
 func SelectById(dbc *sqlx.DB, id int) (Account, error) {
 	var acc Account
 
-	stmt := selectById
-
-	pStmt, err := dbc.Preparex(stmt)
+	pStmt, err := dbc.Preparex(selectById)
 	if err != nil {
 		return Account{}, errors.Wrap(err, "prepare select account query")
 	}
