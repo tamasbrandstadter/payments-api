@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,18 +9,30 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
 	"github.com/tamasbrandstadter/payments-api/internal/testdb"
 )
 
-var expectedAcc = &account.Account{
-	ID:         1,
-	CustomerID: 1,
-	Balance:    999,
-	Currency:   "EUR",
-	CreatedAt:  testdb.TestTime,
-	ModifiedAt: testdb.TestTime,
-	Frozen:     false,
+func TestFindAllAccountsEmpty(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/accounts"), nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusOK, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var accounts []account.Account
+	if err := json.NewDecoder(w.Body).Decode(&accounts); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Empty(t, accounts)
 }
 
 func TestGetAccountById(t *testing.T) {
@@ -40,15 +53,23 @@ func TestGetAccountById(t *testing.T) {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
 	}
 
-	if expectedAcc != nil {
-		var actualAccount account.Account
-		if err := json.NewDecoder(w.Body).Decode(&actualAccount); err != nil {
-			t.Errorf("error decoding response body: %v", err)
-		}
+	var expectedAcc = &account.Account{
+		ID:         1,
+		CustomerID: 1,
+		Balance:    999,
+		Currency:   "EUR",
+		CreatedAt:  testdb.TestTime,
+		ModifiedAt: testdb.TestTime,
+		Frozen:     false,
+	}
 
-		if d := cmp.Diff(*expectedAcc, actualAccount); d != "" {
-			t.Errorf("unexpected difference in response body:\n%v", d)
-		}
+	var actualAcc account.Account
+	if err := json.NewDecoder(w.Body).Decode(&actualAcc); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	if diff := cmp.Diff(*expectedAcc, actualAcc); diff != "" {
+		t.Errorf("unexpected difference in response body:\n%v", diff)
 	}
 }
 
@@ -62,6 +83,231 @@ func TestGetAccountByIdNotFound(t *testing.T) {
 	a.ServeHTTP(w, req)
 
 	if e, a := http.StatusNotFound, w.Code; e != a {
-		t.Errorf("expected status code: %v, got status vode: %v", e, a)
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
 	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "account id 2 is not found", response["error"])
+}
+
+func TestGetAccountByIdWithInvalidId(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "/accounts/textId", nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "unable to parse account id", response["error"])
+}
+
+func TestFindAllAccounts(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/accounts"), nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusOK, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var accounts []account.Account
+	if err := json.NewDecoder(w.Body).Decode(&accounts); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Len(t, accounts, 1)
+}
+
+func TestCreateAccountForCustomer(t *testing.T) {
+	payload := account.CreateAccountRequest{
+		FirstName:      "first",
+		LastName:       "last",
+		Email:          "first@last.com",
+		InitialBalance: 15,
+		Currency:       account.Currency("GBP"),
+	}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusCreated, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var actualAcc account.Account
+	if err := json.NewDecoder(w.Body).Decode(&actualAcc); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	expectedAcc := account.Account{
+		ID:         2,
+		CustomerID: 2,
+		Balance:    15.0,
+		Currency:   "GBP",
+		Frozen:     false,
+	}
+
+	assert.Equal(t, expectedAcc.ID, actualAcc.ID)
+	assert.Equal(t, expectedAcc.CustomerID, actualAcc.CustomerID)
+	assert.Equal(t, expectedAcc.Balance, actualAcc.Balance)
+	assert.Equal(t, expectedAcc.Currency, actualAcc.Currency)
+	assert.False(t, expectedAcc.Frozen)
+	assert.NotNil(t, expectedAcc.CreatedAt)
+	assert.NotNil(t, expectedAcc.ModifiedAt)
+}
+
+func TestCreateAccountForCustomerInvalidPayload(t *testing.T) {
+	payload := "'"
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "invalid request payload, unable to parse", response["error"])
+}
+
+func TestCreateAccountForCustomerErrorInName(t *testing.T) {
+	payload := account.CreateAccountRequest{
+		Email:          "first@last.com",
+		InitialBalance: 15,
+		Currency:       account.Currency("GBP"),
+	}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "firstname and lastname are required fields", response["error"])
+}
+
+func TestCreateAccountForCustomerErrorUnsupportedCurrency(t *testing.T) {
+	payload := account.CreateAccountRequest{
+		FirstName:      "first",
+		LastName:       "last",
+		Email:          "first@last.com",
+		InitialBalance: 15,
+		Currency:       account.Currency("HUF"),
+	}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "HUF currency not supported", response["error"])
+}
+
+func TestCreateAccountForCustomerDuplicateEmail(t *testing.T) {
+	payload := account.CreateAccountRequest{
+		FirstName:      "apple",
+		LastName:       "pie",
+		Email:          "first@last.com",
+		InitialBalance: 15,
+		Currency:       account.Currency("GBP"),
+	}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "first@last.com is taken, specify another one", response["error"])
 }

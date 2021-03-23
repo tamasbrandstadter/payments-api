@@ -1,9 +1,5 @@
 version: '3.5'
 
-networks:
-  integration-tests:
-    driver: bridge
-
 services:
   db:
     image: postgres:latest
@@ -19,5 +15,3 @@ services:
     restart: on-failure
     volumes:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - integration-tests
