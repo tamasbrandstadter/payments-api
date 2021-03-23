@@ -100,7 +100,7 @@ func (a *Application) DeleteAccountById(w http.ResponseWriter, r *http.Request) 
 
 	if err = account.Delete(a.DB, id); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("%d account id is not found", id))
+			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("account id %d is not found", id))
 			return
 		}
 
@@ -121,11 +121,11 @@ func (a *Application) Freeze(w http.ResponseWriter, r *http.Request) {
 	acc, err := account.Freeze(a.DB, id)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("%d account id is not found", id))
+			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("account id %d is not found", id))
 			return
 		}
 
-		web.RespondError(w, http.StatusInternalServerError,fmt.Sprintf("unable to delete account: %s", err.Error()))
+		web.RespondError(w, http.StatusInternalServerError,fmt.Sprintf("unable to freeze account: %s", err.Error()))
 		return
 	}
 

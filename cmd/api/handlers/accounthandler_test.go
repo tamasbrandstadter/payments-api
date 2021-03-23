@@ -116,7 +116,7 @@ func TestGetAccountByIdWithInvalidId(t *testing.T) {
 }
 
 func TestFindAllAccounts(t *testing.T) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/accounts"), nil)
+	req, err := http.NewRequest(http.MethodGet, "/accounts", nil)
 	if err != nil {
 		t.Errorf("error creating request: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestCreateAccountForCustomer(t *testing.T) {
 		t.Errorf("error encoding request body: %v", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	req, err := http.NewRequest(http.MethodPost, "/accounts", &body)
 	if err != nil {
 		t.Errorf("error creating request: %v", err)
 	}
@@ -179,9 +179,9 @@ func TestCreateAccountForCustomer(t *testing.T) {
 	assert.Equal(t, expectedAcc.CustomerID, actualAcc.CustomerID)
 	assert.Equal(t, expectedAcc.Balance, actualAcc.Balance)
 	assert.Equal(t, expectedAcc.Currency, actualAcc.Currency)
-	assert.False(t, expectedAcc.Frozen)
-	assert.NotNil(t, expectedAcc.CreatedAt)
-	assert.NotNil(t, expectedAcc.ModifiedAt)
+	assert.False(t, actualAcc.Frozen)
+	assert.NotNil(t, actualAcc.CreatedAt)
+	assert.NotNil(t, actualAcc.ModifiedAt)
 }
 
 func TestCreateAccountForCustomerInvalidPayload(t *testing.T) {
@@ -192,7 +192,7 @@ func TestCreateAccountForCustomerInvalidPayload(t *testing.T) {
 		t.Errorf("error encoding request body: %v", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	req, err := http.NewRequest(http.MethodPost, "/accounts", &body)
 	if err != nil {
 		t.Errorf("error creating request: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestCreateAccountForCustomerErrorInName(t *testing.T) {
 		t.Errorf("error encoding request body: %v", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	req, err := http.NewRequest(http.MethodPost, "/accounts", &body)
 	if err != nil {
 		t.Errorf("error creating request: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestCreateAccountForCustomerErrorUnsupportedCurrency(t *testing.T) {
 		t.Errorf("error encoding request body: %v", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	req, err := http.NewRequest(http.MethodPost, "/accounts", &body)
 	if err != nil {
 		t.Errorf("error creating request: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestCreateAccountForCustomerDuplicateEmail(t *testing.T) {
 		t.Errorf("error encoding request body: %v", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/accounts"), &body)
+	req, err := http.NewRequest(http.MethodPost, "/accounts", &body)
 	if err != nil {
 		t.Errorf("error creating request: %v", err)
 	}
@@ -310,4 +310,158 @@ func TestCreateAccountForCustomerDuplicateEmail(t *testing.T) {
 	}
 
 	assert.Equal(t, "first@last.com is taken, specify another one", response["error"])
+}
+
+func TestFindAllAccountsAfterCreation(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "/accounts", nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusOK, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var accounts []account.Account
+	if err := json.NewDecoder(w.Body).Decode(&accounts); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Len(t, accounts, 2)
+}
+
+func TestFreezeAccount(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/freeze", 2), nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusOK, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var actualAcc account.Account
+	if err := json.NewDecoder(w.Body).Decode(&actualAcc); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	expectedAcc := account.Account{
+		ID:         2,
+		CustomerID: 2,
+		Balance:    15.0,
+		Currency:   "GBP",
+		Frozen:     true,
+	}
+
+	assert.Equal(t, expectedAcc.ID, actualAcc.ID)
+	assert.Equal(t, expectedAcc.CustomerID, actualAcc.CustomerID)
+	assert.Equal(t, expectedAcc.Balance, actualAcc.Balance)
+	assert.Equal(t, expectedAcc.Currency, actualAcc.Currency)
+	assert.True(t, actualAcc.Frozen)
+	assert.NotNil(t, actualAcc.CreatedAt)
+	assert.NotNil(t, actualAcc.ModifiedAt)
+}
+
+func TestFreezeAccountNotFound(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/freeze", 77), nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusNotFound, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "account id 77 is not found", response["error"])
+}
+
+func TestFreezeAccountInvalidId(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPut, "/accounts/textId/freeze", nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "unable to parse account id", response["error"])
+}
+
+func TestDeleteAccount(t *testing.T) {
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/accounts/%d", 2), nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusNoContent, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+}
+
+func TestDeleteAccountNotFond(t *testing.T) {
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/accounts/%d", 77), nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusNotFound, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "account id 77 is not found", response["error"])
+}
+
+func TestDeleteAccountInvalidId(t *testing.T) {
+	req, err := http.NewRequest(http.MethodDelete, "/accounts/textId", nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "unable to parse account id", response["error"])
 }
