@@ -16,7 +16,7 @@ import (
 	"github.com/tamasbrandstadter/payments-api/internal/db"
 )
 
-func main()  {
+func main() {
 	log.SetFormatter(&log.TextFormatter{TimestampFormat: time.RFC3339, FullTimestamp: true})
 
 	var cfg struct {
@@ -46,7 +46,7 @@ func main()  {
 		return
 	}
 
-	defer func(){
+	defer func() {
 		if err := dbc.Close(); err != nil {
 			log.Printf("error closing database: %v", err)
 		}

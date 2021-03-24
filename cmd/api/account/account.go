@@ -10,7 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type FundsError struct{
+type FundsError struct {
 	Balance float64
 }
 
