@@ -111,8 +111,12 @@ func TestCreate(t *testing.T) {
 		Currency:       Currency("EUR"),
 	}
 
+	mock.ExpectBegin()
+
 	mock.ExpectPrepare(query).ExpectQuery().WithArgs(customerId, request.InitialBalance, request.Currency, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(rows)
+
+	mock.ExpectCommit()
 
 	actualAcc, err := Create(db, customerId, request)
 	if err != nil {
@@ -143,8 +147,12 @@ func TestCreateError(t *testing.T) {
 		Currency:       Currency("EUR"),
 	}
 
+	mock.ExpectBegin()
+
 	mock.ExpectPrepare(query).ExpectQuery().WithArgs(customerId, request.InitialBalance, request.Currency, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnError(sql.ErrTxDone)
+
+	mock.ExpectRollback()
 
 	_, err := Create(db, customerId, request)
 

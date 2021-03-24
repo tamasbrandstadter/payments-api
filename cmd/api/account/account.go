@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -68,6 +69,11 @@ func SelectById(dbc *sqlx.DB, id int) (Account, error) {
 }
 
 func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error) {
+	tx, err := dbc.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return Account{}, err
+	}
+
 	acc := Account{
 		CustomerID: customerId,
 		Balance:    ar.InitialBalance,
@@ -77,21 +83,21 @@ func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error
 		Frozen:     false,
 	}
 
-	stmt, err := dbc.Prepare(insert)
+	stmt, err := tx.Prepare(insert)
 	if err != nil {
-		return Account{}, errors.Wrap(err, "insert new account row")
+		return Account{}, errors.Wrap(err, "insert new account row prepare")
 	}
-
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.WithError(errors.Wrap(err, "close psql statement")).Info("create account")
-		}
-	}()
 
 	row := stmt.QueryRow(acc.CustomerID, acc.Balance, acc.Currency, acc.CreatedAt, acc.ModifiedAt)
 
 	if err = row.Scan(&acc.ID); err != nil {
-		return Account{}, errors.Wrap(err, "get inserted row id for account")
+		_ = tx.Rollback()
+		log.Warnf("account creation for customer id %d was rolled back", customerId)
+		return Account{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		log.Error("failed to commit account creation, error: ", err)
+		return Account{}, errors.Wrap(err, "account commit")
 	}
 
 	return acc, nil
@@ -102,10 +108,21 @@ func Delete(dbc *sqlx.DB, id int) error {
 		return sql.ErrNoRows
 	}
 
-	if _, err := dbc.Exec(deleteById, id); err != nil {
+	tx, err := dbc.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec(deleteById, id); err != nil {
+		_ = tx.Rollback()
+		log.Warnf("account deletion for id %d was rolled back", id)
 		return errors.Wrap(err, "delete account row")
 	}
 
+	if err = tx.Commit(); err != nil {
+		log.Error("failed to commit account deletion, error: ", err)
+		return err
+	}
 	return nil
 }
 
@@ -115,21 +132,27 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 		return Account{}, sql.ErrNoRows
 	}
 
+	tx, err := dbc.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return Account{}, err
+	}
+
 	modifiedAt := time.Now().UTC()
 
-	stmt, err := dbc.Prepare(freezeById)
+	stmt, err := tx.Prepare(freezeById)
 	if err != nil {
 		return Account{}, errors.Wrap(err, "freeze account row")
 	}
 
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.WithError(errors.Wrap(err, "close psql statement")).Info("freeze account")
-		}
-	}()
-
 	if err = stmt.QueryRow(modifiedAt, id).Err(); err != nil {
+		_ = tx.Rollback()
+		log.Warnf("freeze account for id %d was rolle back", id)
 		return Account{}, errors.Wrap(err, "get inserted row id for account freeze")
+	}
+
+	if err = tx.Commit(); err != nil {
+		log.Error("failed to commit account freeze, error: ", err)
+		return Account{}, err
 	}
 
 	acc.ModifiedAt = modifiedAt
