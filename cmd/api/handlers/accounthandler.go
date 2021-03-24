@@ -168,8 +168,8 @@ func (a *Application) Deposit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to to deposit to account %g, error: %s",
-			payload.Amount, err.Error()))
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to deposit to account %d, error: %s",
+			id, err.Error()))
 		return
 	}
 
@@ -210,7 +210,7 @@ func (a *Application) Withdraw(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to deposit to account %d, error: %s",
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to withdraw from account %d, error: %s",
 			id, err.Error()))
 		return
 	}

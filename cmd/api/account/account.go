@@ -15,7 +15,7 @@ type FundsError struct{
 }
 
 func (fe *FundsError) Error() string {
-	return fmt.Sprintf("insufficient funds, balance: %b", fe.Balance)
+	return fmt.Sprintf("insufficient funds, balance: %.2f", fe.Balance)
 }
 
 type Currency string

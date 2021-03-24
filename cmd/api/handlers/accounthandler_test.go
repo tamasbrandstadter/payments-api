@@ -437,7 +437,7 @@ func TestDepositErrorNegativeAmount(t *testing.T) {
 	assert.Equal(t, "deposit can't be negative", response["error"])
 }
 
-func TestDepositNotFound(t *testing.T) {
+func TestDepositErrorNotFound(t *testing.T) {
 	payload := account.BalanceOperationRequest{Amount: 3.0}
 
 	var body bytes.Buffer
@@ -507,7 +507,7 @@ func TestWithdraw(t *testing.T) {
 	assert.NotNil(t, actualAcc.ModifiedAt)
 }
 
-func TestWithdrawNegativeAmount(t *testing.T) {
+func TestWithdrawErrorNegativeAmount(t *testing.T) {
 	payload := account.BalanceOperationRequest{Amount: -3.0}
 
 	var body bytes.Buffer
@@ -535,7 +535,7 @@ func TestWithdrawNegativeAmount(t *testing.T) {
 	assert.Equal(t, "withdraw amount can't be negative", response["error"])
 }
 
-func TestWithdrawNotFound(t *testing.T) {
+func TestWithdrawErrorNotFound(t *testing.T) {
 	payload := account.BalanceOperationRequest{Amount: 3.0}
 
 	var body bytes.Buffer
@@ -561,6 +561,34 @@ func TestWithdrawNotFound(t *testing.T) {
 	}
 
 	assert.Equal(t, "account id 676 is not found", response["error"])
+}
+
+func TestWithdrawErrorInsufficientFunds(t *testing.T) {
+	payload := account.BalanceOperationRequest{Amount: 10000.0}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/withdraw", 2), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusForbidden, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "insufficient funds, balance: 15.00", response["error"])
 }
 
 func TestFreezeAccount(t *testing.T) {
