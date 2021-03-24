@@ -197,20 +197,21 @@ func (a *Application) Withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	acc, err := account.Deposit(a.DB, id, payload.Amount)
+	acc, err := account.Withdraw(a.DB, id, payload.Amount)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("account id %d is not found", id))
 			return
 		}
 
-		fe, ok := err.(*account.FundsError); if ok {
+		fe, ok := err.(*account.FundsError)
+		if ok {
 			web.RespondError(w, http.StatusForbidden, fe.Error())
 			return
 		}
 
-		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to to deposit to account %g, error: %s",
-			payload.Amount, err.Error()))
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to deposit to account %d, error: %s",
+			id, err.Error()))
 		return
 	}
 

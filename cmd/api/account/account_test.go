@@ -281,6 +281,81 @@ func TestFreezeErrorInUpdate(t *testing.T) {
 	}
 }
 
+func TestDeposit(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+
+	accId := 1
+	utc := time.Now().UTC()
+
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+
+	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnRows(rows)
+
+	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+
+	mock.ExpectPrepare(balanceQuery).ExpectQuery().WithArgs(237.65, sqlmock.AnyArg(), 1).WillReturnRows()
+
+	actualAcc, err := Deposit(db, accId, 5.25)
+
+	assert.NoError(t, err)
+	assert.True(t, actualAcc.ModifiedAt.After(utc))
+	assert.Equal(t, 237.65, actualAcc.Balance)
+}
+
+func TestWithdraw(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+
+	accId := 1
+	utc := time.Now().UTC()
+
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+
+	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnRows(rows)
+
+	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+
+	mock.ExpectPrepare(balanceQuery).ExpectQuery().WithArgs(230.00, sqlmock.AnyArg(), 1).WillReturnRows()
+
+	actualAcc, err := Withdraw(db, accId, 2.4)
+
+	assert.NoError(t, err)
+	assert.True(t, actualAcc.ModifiedAt.After(utc))
+	assert.Equal(t, 230.00, actualAcc.Balance)
+}
+
+func TestWithdrawInsufficientFundsError(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+
+	accId := 1
+	utc := time.Now().UTC()
+
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+
+	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnRows(rows)
+
+	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+
+	mock.ExpectPrepare(balanceQuery).ExpectQuery().WithArgs(1000.00, sqlmock.AnyArg(), 1).WillReturnRows()
+
+	_, err := Withdraw(db, accId, 1000.00)
+	err, ok := err.(*FundsError)
+	if !ok {
+		t.Errorf("withdraw test failed err expected FundsError but got: %v:", err)
+	}
+}
+
 func NewMockDb() (*sqlx.DB, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

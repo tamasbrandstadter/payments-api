@@ -367,6 +367,202 @@ func TestFindAllAccountsAfterCreation(t *testing.T) {
 	assert.Len(t, accounts, 2)
 }
 
+func TestDeposit(t *testing.T) {
+	payload := account.BalanceOperationRequest{Amount: 3.0}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/deposit", 2), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusOK, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var actualAcc account.Account
+	if err := json.NewDecoder(w.Body).Decode(&actualAcc); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	expectedAcc := account.Account{
+		ID:         2,
+		CustomerID: 2,
+		Balance:    18.0,
+		Currency:   "GBP",
+		Frozen:     false,
+	}
+
+	assert.Equal(t, expectedAcc.ID, actualAcc.ID)
+	assert.Equal(t, expectedAcc.CustomerID, actualAcc.CustomerID)
+	assert.Equal(t, expectedAcc.Balance, actualAcc.Balance)
+	assert.Equal(t, expectedAcc.Currency, actualAcc.Currency)
+	assert.False(t, actualAcc.Frozen)
+	assert.NotNil(t, actualAcc.CreatedAt)
+	assert.NotNil(t, actualAcc.ModifiedAt)
+}
+
+func TestDepositErrorNegativeAmount(t *testing.T) {
+	payload := account.BalanceOperationRequest{Amount: -3.0}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/deposit", 2), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "deposit can't be negative", response["error"])
+}
+
+func TestDepositNotFound(t *testing.T) {
+	payload := account.BalanceOperationRequest{Amount: 3.0}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/deposit", 676), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusNotFound, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "account id 676 is not found", response["error"])
+}
+
+func TestWithdraw(t *testing.T) {
+	payload := account.BalanceOperationRequest{Amount: 3.0}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/withdraw", 2), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusOK, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var actualAcc account.Account
+	if err := json.NewDecoder(w.Body).Decode(&actualAcc); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	expectedAcc := account.Account{
+		ID:         2,
+		CustomerID: 2,
+		Balance:    15.0,
+		Currency:   "GBP",
+		Frozen:     false,
+	}
+
+	assert.Equal(t, expectedAcc.ID, actualAcc.ID)
+	assert.Equal(t, expectedAcc.CustomerID, actualAcc.CustomerID)
+	assert.Equal(t, expectedAcc.Balance, actualAcc.Balance)
+	assert.Equal(t, expectedAcc.Currency, actualAcc.Currency)
+	assert.False(t, actualAcc.Frozen)
+	assert.NotNil(t, actualAcc.CreatedAt)
+	assert.NotNil(t, actualAcc.ModifiedAt)
+}
+
+func TestWithdrawNegativeAmount(t *testing.T) {
+	payload := account.BalanceOperationRequest{Amount: -3.0}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/withdraw", 2), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusBadRequest, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "withdraw amount can't be negative", response["error"])
+}
+
+func TestWithdrawNotFound(t *testing.T) {
+	payload := account.BalanceOperationRequest{Amount: 3.0}
+
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		t.Errorf("error encoding request body: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/withdraw", 676), &body)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, req)
+
+	if e, a := http.StatusNotFound, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "account id 676 is not found", response["error"])
+}
+
 func TestFreezeAccount(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("/accounts/%d/freeze", 2), nil)
 	if err != nil {
