@@ -175,3 +175,44 @@ func (a *Application) Deposit(w http.ResponseWriter, r *http.Request) {
 
 	web.Respond(w, http.StatusOK, acc)
 }
+
+func (a *Application) Withdraw(w http.ResponseWriter, r *http.Request) {
+	// request validation
+	id, err := strconv.Atoi(httprouter.ParamsFromContext(r.Context()).ByName("id"))
+	if err != nil {
+		web.RespondError(w, http.StatusBadRequest, "unable to parse account id")
+		return
+	}
+
+	var payload account.BalanceOperationRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		web.RespondError(w, http.StatusBadRequest, "invalid request payload, unable to parse")
+		return
+	}
+	defer r.Body.Close()
+
+	// custom validation
+	if payload.Amount < 0 {
+		web.RespondError(w, http.StatusBadRequest, "withdraw amount can't be negative")
+		return
+	}
+
+	acc, err := account.Deposit(a.DB, id, payload.Amount)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			web.RespondError(w, http.StatusNotFound, fmt.Sprintf("account id %d is not found", id))
+			return
+		}
+
+		fe, ok := err.(*account.FundsError); if ok {
+			web.RespondError(w, http.StatusForbidden, fe.Error())
+			return
+		}
+
+		web.RespondError(w, http.StatusInternalServerError, fmt.Sprintf("unable to to deposit to account %g, error: %s",
+			payload.Amount, err.Error()))
+		return
+	}
+
+	web.Respond(w, http.StatusOK, acc)
+}

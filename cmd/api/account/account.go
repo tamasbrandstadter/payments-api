@@ -2,12 +2,21 @@ package account
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
+
+type FundsError struct{
+	Balance float64
+}
+
+func (fe *FundsError) Error() string {
+	return fmt.Sprintf("insufficient funds, balance: %b", fe.Balance)
+}
 
 type Currency string
 
@@ -138,7 +147,7 @@ func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 	modifiedAt := time.Now().UTC()
 	newBalance := acc.Balance + amount
 
-	stmt, err := dbc.Prepare(deposit)
+	stmt, err := dbc.Prepare(updateBalance)
 	if err != nil {
 		return Account{}, errors.Wrap(err, "deposit to account row")
 	}
@@ -151,6 +160,39 @@ func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 
 	if err = stmt.QueryRow(newBalance, modifiedAt, id).Err(); err != nil {
 		return Account{}, errors.Wrap(err, "get inserted row id for deposit")
+	}
+
+	acc.ModifiedAt = modifiedAt
+	acc.Balance = newBalance
+
+	return acc, nil
+}
+
+func Withdraw(dbc *sqlx.DB, id int, amount float64) (Account, error) {
+	acc, err := SelectById(dbc, id)
+	if errors.Cause(err) == sql.ErrNoRows {
+		return Account{}, sql.ErrNoRows
+	}
+
+	newBalance := acc.Balance - amount
+	if newBalance < 0 {
+		return Account{}, &FundsError{Balance: acc.Balance}
+	}
+	modifiedAt := time.Now().UTC()
+
+	stmt, err := dbc.Prepare(updateBalance)
+	if err != nil {
+		return Account{}, errors.Wrap(err, "withdraw to account row")
+	}
+
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			log.WithError(errors.Wrap(err, "close psql statement")).Info("withdraw to account")
+		}
+	}()
+
+	if err = stmt.QueryRow(newBalance, modifiedAt, id).Err(); err != nil {
+		return Account{}, errors.Wrap(err, "get inserted row id for withdraw")
 	}
 
 	acc.ModifiedAt = modifiedAt

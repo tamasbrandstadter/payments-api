@@ -12,6 +12,7 @@ const (
 	accountById   = "/accounts/:id"
 	freezeAccount = "/accounts/:id/freeze"
 	deposit       = "/accounts/:id/deposit"
+	withdraw      = "/accounts/:id/withdraw"
 )
 
 type Application struct {
@@ -35,6 +36,7 @@ func NewApplication(db *sqlx.DB) *Application {
 	router.HandlerFunc(http.MethodDelete, accountById, app.DeleteAccountById)
 	router.HandlerFunc(http.MethodPut, freezeAccount, app.Freeze)
 	router.HandlerFunc(http.MethodPut, deposit, app.Deposit)
+	router.HandlerFunc(http.MethodPut, withdraw, app.Withdraw)
 
 	app.handler = router
 	return &app
