@@ -69,7 +69,7 @@ func SelectById(dbc *sqlx.DB, id int) (Account, error) {
 }
 
 func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error) {
-	tx, err := dbc.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	tx, err := dbc.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return Account{}, err
 	}
@@ -85,6 +85,7 @@ func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error
 
 	stmt, err := tx.Prepare(insert)
 	if err != nil {
+		_ = tx.Rollback()
 		return Account{}, errors.Wrap(err, "insert new account row prepare")
 	}
 
@@ -141,12 +142,13 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 
 	stmt, err := tx.Prepare(freezeById)
 	if err != nil {
+		_ = tx.Rollback()
 		return Account{}, errors.Wrap(err, "freeze account row")
 	}
 
-	if err = stmt.QueryRow(modifiedAt, id).Err(); err != nil {
+	if _, err = stmt.Exec(modifiedAt, id); err != nil {
 		_ = tx.Rollback()
-		log.Warnf("freeze account for id %d was rolle back", id)
+		log.Warnf("freeze account for id %d was rolled back", id)
 		return Account{}, errors.Wrap(err, "get inserted row id for account freeze")
 	}
 
@@ -162,27 +164,44 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 }
 
 func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
-	acc, err := SelectById(dbc, id)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
+	defer cancelFunc()
+
+	tx, err := dbc.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return Account{}, err
+	}
+
+	var acc Account
+
+	row := tx.QueryRowx(selectById, id)
+
+	err = row.StructScan(&acc)
 	if errors.Cause(err) == sql.ErrNoRows {
+		_ = tx.Rollback()
 		return Account{}, sql.ErrNoRows
+	} else if err != nil {
+		_ = tx.Rollback()
+		return Account{}, errors.Wrap(err, "select singular row from account table")
 	}
 
 	modifiedAt := time.Now().UTC()
 	newBalance := acc.Balance + amount
 
-	stmt, err := dbc.Prepare(updateBalance)
+	stmt, err := tx.Prepare(updateBalance)
 	if err != nil {
 		return Account{}, errors.Wrap(err, "deposit to account row")
 	}
 
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.WithError(errors.Wrap(err, "close psql statement")).Info("deposit to account")
-		}
-	}()
-
-	if err = stmt.QueryRow(newBalance, modifiedAt, id).Err(); err != nil {
+	if _, err = stmt.Exec(newBalance, modifiedAt, id); err != nil {
+		_ = tx.Rollback()
+		log.Warnf("deposit for account id %d was rolled back", id)
 		return Account{}, errors.Wrap(err, "get inserted row id for deposit")
+	}
+
+	if err = tx.Commit(); err != nil {
+		log.Error("failed to commit deposit to account, error: ", err)
+		return Account{}, err
 	}
 
 	acc.ModifiedAt = modifiedAt
@@ -192,30 +211,50 @@ func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 }
 
 func Withdraw(dbc *sqlx.DB, id int, amount float64) (Account, error) {
-	acc, err := SelectById(dbc, id)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
+	defer cancelFunc()
+
+	tx, err := dbc.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return Account{}, err
+	}
+
+	var acc Account
+
+	row := tx.QueryRowx(selectById, id)
+
+	err = row.StructScan(&acc)
 	if errors.Cause(err) == sql.ErrNoRows {
+		_ = tx.Rollback()
 		return Account{}, sql.ErrNoRows
+	} else if err != nil {
+		_ = tx.Rollback()
+		return Account{}, errors.Wrap(err, "select singular row from account table")
 	}
 
 	newBalance := acc.Balance - amount
 	if newBalance < 0 {
+		_ = tx.Rollback()
+		log.Warnf("withdraw for account id %d was rolled back", id)
 		return Account{}, &FundsError{Balance: acc.Balance}
 	}
 	modifiedAt := time.Now().UTC()
 
-	stmt, err := dbc.Prepare(updateBalance)
+	stmt, err := tx.Prepare(updateBalance)
 	if err != nil {
+		_ = tx.Rollback()
 		return Account{}, errors.Wrap(err, "withdraw to account row")
 	}
 
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.WithError(errors.Wrap(err, "close psql statement")).Info("withdraw to account")
-		}
-	}()
-
-	if err = stmt.QueryRow(newBalance, modifiedAt, id).Err(); err != nil {
+	if _, err = stmt.Exec(newBalance, modifiedAt, id); err != nil {
+		_ = tx.Rollback()
+		log.Warnf("withdraw from account id %d was rolled back", id)
 		return Account{}, errors.Wrap(err, "get inserted row id for withdraw")
+	}
+
+	if err = tx.Commit(); err != nil {
+		log.Error("failed to commit withdraw from account, error: ", err)
+		return Account{}, err
 	}
 
 	acc.ModifiedAt = modifiedAt
