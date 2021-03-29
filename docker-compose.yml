@@ -1,6 +1,12 @@
 version: '3.5'
 
 services:
+  mq:
+    image: rabbitmq:3.8.14-management
+    container_name: mq
+    ports:
+      - 5672:5672
+      - 15672:15672
   db:
     image: postgres:latest
     container_name: db
