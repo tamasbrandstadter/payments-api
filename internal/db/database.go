@@ -5,7 +5,6 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,12 +26,12 @@ func NewConnection(cfg Config) (*sqlx.DB, error) {
 
 	log.Info("connecting to database...")
 	if db, err = sqlx.Connect("postgres", conn); err != nil {
-		return nil, errors.Wrap(err, "database connection failure")
+		return nil, err
 	}
 
 	log.Info("verifying connection...")
 	if err := db.Ping(); err != nil {
-		return nil, errors.Wrap(err, "ping to db failed")
+		return nil, err
 	}
 
 	log.Info("verified postgres connection")
