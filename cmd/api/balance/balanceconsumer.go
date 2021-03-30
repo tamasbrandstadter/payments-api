@@ -1,4 +1,4 @@
-package consumer
+package balance
 
 import (
 	"bytes"
@@ -16,28 +16,28 @@ import (
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
 )
 
-type BalanceOperationConsumer struct {
+type TransactionConsumer struct {
 	Deposit     amqp.Queue
 	Withdraw    amqp.Queue
 	Concurrency int
 }
 
-func (c BalanceOperationConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
-	deposits, err := conn.Channel.Consume(c.Deposit.Name, "deposit-consumer", false, false,
+func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
+	deposits, err := conn.Channel.Consume(tc.Deposit.Name, "deposit-consumer", false, false,
 		false, false, nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	withdraws, err := conn.Channel.Consume(c.Withdraw.Name, "withdraw-consumer", false, false,
+	withdraws, err := conn.Channel.Consume(tc.Withdraw.Name, "withdraw-consumer", false, false,
 		false, false, nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	for i := 0; i < c.Concurrency; i++ {
+	for i := 0; i < tc.Concurrency; i++ {
 		go func() {
 			for d := range deposits {
 				ok, err2 := handleDeposit(d, db)
@@ -52,7 +52,7 @@ func (c BalanceOperationConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error 
 		}()
 	}
 
-	for i := 0; i < c.Concurrency; i++ {
+	for i := 0; i < tc.Concurrency; i++ {
 		go func() {
 			for w := range withdraws {
 				ok, err2 := handleWithdraw(w, db)
@@ -73,7 +73,7 @@ func (c BalanceOperationConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error 
 	return nil
 }
 
-func (c BalanceOperationConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error) {
+func (tc TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error) {
 	err := <-closed
 	if err != nil {
 		log.Errorf("closed mq connection: %v", err)
@@ -85,7 +85,7 @@ func (c BalanceOperationConsumer) ClosedConnectionListener(cfg mq.Config, db *sq
 
 			if conn, err := mq.NewConnection(cfg); err == nil {
 				log.Info("reconnected to mq")
-				_ = c.StartConsume(conn, db)
+				_ = tc.StartConsume(conn, db)
 			}
 
 			time.Sleep(1 * time.Second)

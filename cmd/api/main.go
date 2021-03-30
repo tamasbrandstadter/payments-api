@@ -8,7 +8,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
-	"github.com/tamasbrandstadter/payments-api/cmd/api/consumer"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/balance"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/handler"
 	"github.com/tamasbrandstadter/payments-api/internal/db"
 	"github.com/tamasbrandstadter/payments-api/internal/env"
@@ -66,7 +66,7 @@ func main() {
 		log.Errorf("error declaring queues: %v", err)
 		return
 	}
-	c := consumer.BalanceOperationConsumer{
+	tc := balance.TransactionConsumer{
 		Deposit:     deposit,
 		Withdraw:    withdraw,
 		Concurrency: mqCfg.Concurrency,
@@ -89,11 +89,11 @@ func main() {
 		}
 	}()
 
-	err = c.StartConsume(conn, dbc)
+	err = tc.StartConsume(conn, dbc)
 	if err != nil {
 		log.Errorf("error starting consumers: %v", err)
 	}
-	go c.ClosedConnectionListener(mqCfg, dbc, conn.Channel.NotifyClose(make(chan *amqp.Error)))
+	go tc.ClosedConnectionListener(mqCfg, dbc, conn.Channel.NotifyClose(make(chan *amqp.Error)))
 
 	ctx, cancel := context.WithTimeout(context.Background(), envCfg.ShutdownTimeout)
 	defer cancel()

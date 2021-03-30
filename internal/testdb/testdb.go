@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	log "github.com/sirupsen/logrus"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
 	"github.com/tamasbrandstadter/payments-api/internal/db"
 )
 
@@ -74,4 +76,27 @@ func DeleteTestAccount(dbc *sqlx.DB) error {
 	}
 
 	return nil
+}
+
+func SelectById(dbc *sqlx.DB, id int) (account.Account, error) {
+	var acc account.Account
+
+	pStmt, err := dbc.Preparex("SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=$1;")
+	if err != nil {
+		return account.Account{}, err
+	}
+
+	defer func() {
+		if err := pStmt.Close(); err != nil {
+			log.WithError(err).Info("select account")
+		}
+	}()
+
+	row := pStmt.QueryRowx(id)
+
+	if err := row.StructScan(&acc); err != nil {
+		return account.Account{}, err
+	}
+
+	return acc, nil
 }
