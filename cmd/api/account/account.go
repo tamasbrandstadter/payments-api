@@ -39,7 +39,7 @@ func SelectAll(dbc *sqlx.DB) ([]Account, error) {
 	accounts := make([]Account, 0)
 
 	if err := dbc.Select(&accounts, selectAll); err != nil {
-		return nil, errors.Wrap(err, "select all rows from accounts table")
+		return nil, err
 	}
 
 	return accounts, nil
@@ -50,19 +50,19 @@ func SelectById(dbc *sqlx.DB, id int) (Account, error) {
 
 	pStmt, err := dbc.Preparex(selectById)
 	if err != nil {
-		return Account{}, errors.Wrap(err, "prepare select account query")
+		return Account{}, err
 	}
 
 	defer func() {
 		if err := pStmt.Close(); err != nil {
-			log.WithError(errors.Wrap(err, "close psql statement")).Info("select account")
+			log.WithError(err).Info("select account")
 		}
 	}()
 
 	row := pStmt.QueryRowx(id)
 
 	if err := row.StructScan(&acc); err != nil {
-		return Account{}, errors.Wrap(err, "select singular row from account table")
+		return Account{}, err
 	}
 
 	return acc, nil
@@ -86,7 +86,7 @@ func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error
 	stmt, err := tx.Prepare(insert)
 	if err != nil {
 		_ = tx.Rollback()
-		return Account{}, errors.Wrap(err, "insert new account row prepare")
+		return Account{}, err
 	}
 
 	row := stmt.QueryRow(acc.CustomerID, acc.Balance, acc.Currency, acc.CreatedAt, acc.ModifiedAt)
@@ -98,7 +98,7 @@ func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error
 	}
 	if err = tx.Commit(); err != nil {
 		log.Error("failed to commit account creation, error: ", err)
-		return Account{}, errors.Wrap(err, "account commit")
+		return Account{}, err
 	}
 
 	return acc, nil
@@ -117,7 +117,7 @@ func Delete(dbc *sqlx.DB, id int) error {
 	if _, err = tx.Exec(deleteById, id); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("account deletion for id %d was rolled back", id)
-		return errors.Wrap(err, "delete account row")
+		return err
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -143,13 +143,13 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 	stmt, err := tx.Prepare(freezeById)
 	if err != nil {
 		_ = tx.Rollback()
-		return Account{}, errors.Wrap(err, "freeze account row")
+		return Account{}, err
 	}
 
 	if _, err = stmt.Exec(modifiedAt, id); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("freeze account for id %d was rolled back", id)
-		return Account{}, errors.Wrap(err, "get inserted row id for account freeze")
+		return Account{}, err
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -182,7 +182,7 @@ func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 		return Account{}, sql.ErrNoRows
 	} else if err != nil {
 		_ = tx.Rollback()
-		return Account{}, errors.Wrap(err, "select singular row from account table")
+		return Account{}, err
 	}
 
 	modifiedAt := time.Now().UTC()
@@ -190,13 +190,13 @@ func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 
 	stmt, err := tx.Prepare(updateBalance)
 	if err != nil {
-		return Account{}, errors.Wrap(err, "deposit to account row")
+		return Account{}, err
 	}
 
 	if _, err = stmt.Exec(newBalance, modifiedAt, id); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("deposit for account id %d was rolled back", id)
-		return Account{}, errors.Wrap(err, "get inserted row id for deposit")
+		return Account{}, err
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -229,7 +229,7 @@ func Withdraw(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 		return Account{}, sql.ErrNoRows
 	} else if err != nil {
 		_ = tx.Rollback()
-		return Account{}, errors.Wrap(err, "select singular row from account table")
+		return Account{}, err
 	}
 
 	newBalance := acc.Balance - amount
@@ -243,13 +243,13 @@ func Withdraw(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 	stmt, err := tx.Prepare(updateBalance)
 	if err != nil {
 		_ = tx.Rollback()
-		return Account{}, errors.Wrap(err, "withdraw to account row")
+		return Account{}, err
 	}
 
 	if _, err = stmt.Exec(newBalance, modifiedAt, id); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("withdraw from account id %d was rolled back", id)
-		return Account{}, errors.Wrap(err, "get inserted row id for withdraw")
+		return Account{}, err
 	}
 
 	if err = tx.Commit(); err != nil {

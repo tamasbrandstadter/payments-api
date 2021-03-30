@@ -1,9 +1,9 @@
 package env
 
 import (
-	"github.com/kelseyhightower/envconfig"
-	log "github.com/sirupsen/logrus"
 	"time"
+
+	"github.com/kelseyhightower/envconfig"
 )
 
 type Cfg struct {
@@ -22,12 +22,12 @@ type Cfg struct {
 	ShutdownTimeout time.Duration `envconfig:"SHUTDOWN_TIMEOUT" default:"5s"`
 }
 
-func GetEnvCfg() Cfg {
+func GetEnvCfg() (*Cfg, error) {
 	var cfg Cfg
 
 	if err := envconfig.Process("APP", &cfg); err != nil {
-		log.Fatal("parse environment variables: ", err)
+		return nil, err
 	}
 
-	return cfg
+	return &cfg, nil
 }

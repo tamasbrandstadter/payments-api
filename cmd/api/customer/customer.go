@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
 )
@@ -29,19 +28,19 @@ func Create(dbc *sqlx.DB, ar account.AccCreationRequest) (Customer, error) {
 
 	stmt, err := dbc.Prepare(insert)
 	if err != nil {
-		return Customer{}, errors.Wrap(err, "insert new customer row")
+		return Customer{}, err
 	}
 
 	defer func() {
 		if err := stmt.Close(); err != nil {
-			logrus.WithError(errors.Wrap(err, "close psql statement")).Info("create customer")
+			logrus.WithError(err).Info("create customer")
 		}
 	}()
 
 	row := stmt.QueryRow(c.FirstName, c.LastName, c.Email, c.CreatedAt, c.ModifiedAt)
 
 	if err = row.Scan(&c.ID); err != nil {
-		return Customer{}, errors.Wrap(err, "get inserted row id for customer")
+		return Customer{}, err
 	}
 
 	return c, nil

@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/pkg/errors"
 	"github.com/tamasbrandstadter/payments-api/internal/db"
 )
 
@@ -32,18 +31,18 @@ func Open() (*sqlx.DB, error) {
 func SaveCustomerWithAccount(dbc *sqlx.DB) error {
 	stmt, err := dbc.Prepare("INSERT INTO customers(first_name, last_name, email, created_at, modified_at) VALUES($1,$2,$3,$4,$5) RETURNING id;")
 	if err != nil {
-		return errors.Wrap(err, "prepare test customer insertion")
+		return err
 	}
 
 	row := stmt.QueryRow("first", "last", "test@test.com", TestTime, TestTime)
 	err = row.Err()
 	if err := stmt.Close(); err != nil {
-		return errors.Wrap(err, "close psql statement")
+		return err
 	}
 
 	stmt, err = dbc.Prepare("INSERT INTO accounts(customer_id, balance, currency, created_at, modified_at) VALUES($1,$2,$3,$4,$5) RETURNING id;")
 	if err != nil {
-		return errors.Wrap(err, "prepare test acc insertion")
+		return err
 	}
 
 	row = stmt.QueryRow(1, 999.0, "EUR", TestTime, TestTime)
@@ -51,14 +50,14 @@ func SaveCustomerWithAccount(dbc *sqlx.DB) error {
 	var id int
 	if err = row.Scan(&id); err != nil {
 		if err := stmt.Close(); err != nil {
-			return errors.Wrap(err, "close psql statement")
+			return err
 		}
 
-		return errors.Wrap(err, "capture test acc id")
+		return err
 	}
 
 	if err := stmt.Close(); err != nil {
-		return errors.Wrap(err, "close psql statement")
+		return err
 	}
 
 	return nil

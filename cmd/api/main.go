@@ -7,7 +7,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/tamasbrandstadter/payments-api/cmd/api/handlers"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/consumer"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/handler"
 	"github.com/tamasbrandstadter/payments-api/internal/db"
 	"github.com/tamasbrandstadter/payments-api/internal/env"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
@@ -16,7 +17,10 @@ import (
 func main() {
 	log.SetFormatter(&log.TextFormatter{TimestampFormat: time.RFC3339, FullTimestamp: true})
 
-	envCfg := env.GetEnvCfg()
+	envCfg, err := env.GetEnvCfg()
+	if err != nil {
+		log.Errorf("error parsing env vars: %v", err)
+	}
 
 	dbCfg := db.Config{
 		User: envCfg.DBUser,
@@ -26,18 +30,19 @@ func main() {
 	}
 	dbc, err := db.NewConnection(dbCfg)
 	if err != nil {
-		log.Fatal("connect to db: ", err)
+		log.Errorf("error connecting to db: %v", err)
+		return
 	}
 
 	defer func() {
 		if err := dbc.Close(); err != nil {
-			log.Printf("error closing database: %v", err)
+			log.Errorf("error closing db: %v", err)
 		}
 	}()
 
 	server := http.Server{
 		Addr:           fmt.Sprintf(":%d", 8080),
-		Handler:        handlers.NewApplication(dbc),
+		Handler:        handler.NewApplication(dbc),
 		ReadTimeout:    envCfg.ReadTimeout,
 		WriteTimeout:   envCfg.WriteTimeout,
 		MaxHeaderBytes: 1 << 20,
@@ -51,36 +56,48 @@ func main() {
 	}
 	conn, err := mq.NewConnection(mqCfg)
 	if err != nil {
-		log.Fatal("connect to mq: ", err)
+		log.Errorf("error connecting to mq: %v", err)
+		return
 	}
+
+	defer func() {
+		if err := conn.Channel.Close(); err != nil {
+			log.Errorf("error closing mq channel: %v", err)
+		}
+	}()
 
 	deposit, withdraw, err := conn.DeclareQueues()
 	if err != nil {
-		log.Fatal("unable to declare queues: ", err)
+		log.Errorf("error declaring queues: %v", err)
+		return
 	}
-	balanceHandler := handlers.BalanceOperationConsumer{
-		Deposit: deposit,
+	balanceHandler := consumer.BalanceOperationConsumer{
+		Deposit:  deposit,
 		Withdraw: withdraw,
 	}
 
 	go func() {
-		log.Printf("server started, listening on %s", server.Addr)
+		log.Infof("server started, listening on %s", server.Addr)
 		err = server.ListenAndServe()
 		if err != nil {
-			log.Fatal("server failed to start: ", err)
+			log.Errorf("server failed to start: %v", err)
+			return
 		}
 	}()
 
-	balanceHandler.StartConsumers(conn, dbc)
+	err = balanceHandler.ConsumeFromQueues(conn, dbc)
+	if err != nil {
+		log.Errorf("error starting consumers: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), envCfg.ShutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("shutdown : Graceful shutdown did not complete in %v : %v", envCfg.ShutdownTimeout, err)
+		log.Warnf("shutdown: Graceful shutdown did not complete in %v : %v", envCfg.ShutdownTimeout, err)
 
 		if err := server.Close(); err != nil {
-			log.Printf("shutdown : Error killing server : %v", err)
+			log.Warnf("shutdown: Error killing server : %v", err)
 		}
 	}
 }

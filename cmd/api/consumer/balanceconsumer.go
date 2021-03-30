@@ -1,4 +1,4 @@
-package handlers
+package consumer
 
 import (
 	"bytes"
@@ -15,16 +15,16 @@ import (
 )
 
 type BalanceOperationConsumer struct {
-	Deposit amqp.Queue
+	Deposit  amqp.Queue
 	Withdraw amqp.Queue
 }
 
-func (h BalanceOperationConsumer) StartConsumers(conn mq.Conn, db *sqlx.DB)  {
+func (h BalanceOperationConsumer) ConsumeFromQueues(conn mq.Conn, db *sqlx.DB) error {
 	deposits, err := conn.Channel.Consume(h.Deposit.Name, "deposit-consumer", false, false,
 		false, false, nil,
 	)
 	if err != nil {
-		log.Fatal("Failed to register deposit consumer", err)
+		return err
 	}
 	go func() {
 		for d := range deposits {
@@ -43,7 +43,7 @@ func (h BalanceOperationConsumer) StartConsumers(conn mq.Conn, db *sqlx.DB)  {
 		false, false, nil,
 	)
 	if err != nil {
-		log.Fatal("Failed to register withdraw consumer", err)
+		return err
 	}
 
 	go func() {
@@ -61,6 +61,8 @@ func (h BalanceOperationConsumer) StartConsumers(conn mq.Conn, db *sqlx.DB)  {
 
 	forever := make(chan bool)
 	<-forever
+
+	return nil
 }
 
 func handleDeposit(d amqp.Delivery, db *sqlx.DB) (bool, error) {
