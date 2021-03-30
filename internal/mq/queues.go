@@ -10,7 +10,7 @@ const (
 	withdraws = "withdraws"
 )
 
-func (conn Conn) DeclareQueues() (amqp.Queue, amqp.Queue, error) {
+func (conn Conn) DeclareQueues(concurrency int) (amqp.Queue, amqp.Queue, error) {
 	err := conn.Channel.ExchangeDeclare(exchange, "topic", true, false, false, false, nil)
 	if err != nil {
 		return amqp.Queue{}, amqp.Queue{}, err
@@ -32,6 +32,12 @@ func (conn Conn) DeclareQueues() (amqp.Queue, amqp.Queue, error) {
 	}
 
 	err = conn.Channel.QueueBind(withdraws, "wit", exchange, false, nil)
+	if err != nil {
+		return amqp.Queue{}, amqp.Queue{}, err
+	}
+
+	prefetchCount := concurrency * 4
+	err = conn.Channel.Qos(prefetchCount, 0, false)
 	if err != nil {
 		return amqp.Queue{}, amqp.Queue{}, err
 	}

@@ -80,7 +80,7 @@ func (a *Application) CreateAccountForCustomer(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		if pgErr, ok := errors.Cause(err).(*pq.Error); ok {
 			if string(pgErr.Code) == db.PSQLErrUniqueConstraint {
-				web.RespondError(w, http.StatusBadRequest, fmt.Sprintf("%s is taken, specify another one", payload.Email))
+				web.RespondError(w, http.StatusConflict, fmt.Sprintf("%s is taken, specify another one", payload.Email))
 				return
 			}
 		}

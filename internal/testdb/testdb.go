@@ -62,3 +62,16 @@ func SaveCustomerWithAccount(dbc *sqlx.DB) error {
 
 	return nil
 }
+
+func DeleteTestAccount(dbc *sqlx.DB) error {
+	stmt, err := dbc.Prepare("DELETE FROM accounts WHERE id=$1")
+	if err != nil {
+		return err
+	}
+
+	if _, err = stmt.Exec(1); err != nil {
+		return err
+	}
+
+	return nil
+}

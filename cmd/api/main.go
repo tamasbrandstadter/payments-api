@@ -7,6 +7,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/streadway/amqp"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/consumer"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/handler"
 	"github.com/tamasbrandstadter/payments-api/internal/db"
@@ -40,19 +41,13 @@ func main() {
 		}
 	}()
 
-	server := http.Server{
-		Addr:           fmt.Sprintf(":%d", 8080),
-		Handler:        handler.NewApplication(dbc),
-		ReadTimeout:    envCfg.ReadTimeout,
-		WriteTimeout:   envCfg.WriteTimeout,
-		MaxHeaderBytes: 1 << 20,
-	}
-
 	mqCfg := mq.Config{
-		User: envCfg.MQUser,
-		Pass: envCfg.MQPass,
-		Host: envCfg.MQHost,
-		Port: envCfg.MQPort,
+		User:         envCfg.MQUser,
+		Pass:         envCfg.MQPass,
+		Host:         envCfg.MQHost,
+		Port:         envCfg.MQPort,
+		Concurrency:  5,
+		MaxReconnect: 5,
 	}
 	conn, err := mq.NewConnection(mqCfg)
 	if err != nil {
@@ -66,14 +61,23 @@ func main() {
 		}
 	}()
 
-	deposit, withdraw, err := conn.DeclareQueues()
+	deposit, withdraw, err := conn.DeclareQueues(mqCfg.Concurrency)
 	if err != nil {
 		log.Errorf("error declaring queues: %v", err)
 		return
 	}
-	balanceHandler := consumer.BalanceOperationConsumer{
-		Deposit:  deposit,
-		Withdraw: withdraw,
+	c := consumer.BalanceOperationConsumer{
+		Deposit:     deposit,
+		Withdraw:    withdraw,
+		Concurrency: mqCfg.Concurrency,
+	}
+
+	server := http.Server{
+		Addr:           fmt.Sprintf(":%d", 8080),
+		Handler:        handler.NewApplication(dbc),
+		ReadTimeout:    envCfg.ReadTimeout,
+		WriteTimeout:   envCfg.WriteTimeout,
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	go func() {
@@ -85,10 +89,11 @@ func main() {
 		}
 	}()
 
-	err = balanceHandler.ConsumeFromQueues(conn, dbc)
+	err = c.StartConsume(conn, dbc)
 	if err != nil {
 		log.Errorf("error starting consumers: %v", err)
 	}
+	go c.ClosedConnectionListener(mqCfg, dbc, conn.Channel.NotifyClose(make(chan *amqp.Error)))
 
 	ctx, cancel := context.WithTimeout(context.Background(), envCfg.ShutdownTimeout)
 	defer cancel()

@@ -7,10 +7,12 @@ import (
 )
 
 type Config struct {
-	User string
-	Pass string
-	Host string
-	Port int
+	User         string
+	Pass         string
+	Host         string
+	Port         int
+	Concurrency  int
+	MaxReconnect int
 }
 
 type Conn struct {

@@ -300,7 +300,7 @@ func TestCreateAccountForCustomerDuplicateEmail(t *testing.T) {
 	w := httptest.NewRecorder()
 	a.ServeHTTP(w, req)
 
-	if e, a := http.StatusBadRequest, w.Code; e != a {
+	if e, a := http.StatusConflict, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
 	}
 
@@ -365,6 +365,8 @@ func TestFindAllAccountsAfterCreation(t *testing.T) {
 	}
 
 	assert.Len(t, accounts, 2)
+
+	_ = testdb.DeleteTestAccount(a.DB)
 }
 
 func TestFreezeAccount(t *testing.T) {

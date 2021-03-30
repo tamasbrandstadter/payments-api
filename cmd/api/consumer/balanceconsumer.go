@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -15,54 +17,88 @@ import (
 )
 
 type BalanceOperationConsumer struct {
-	Deposit  amqp.Queue
-	Withdraw amqp.Queue
+	Deposit     amqp.Queue
+	Withdraw    amqp.Queue
+	Concurrency int
 }
 
-func (h BalanceOperationConsumer) ConsumeFromQueues(conn mq.Conn, db *sqlx.DB) error {
-	deposits, err := conn.Channel.Consume(h.Deposit.Name, "deposit-consumer", false, false,
-		false, false, nil,
-	)
-	if err != nil {
-		return err
-	}
-	go func() {
-		for d := range deposits {
-			ok, err2 := handleDeposit(d, db)
-			if err2 != nil {
-				_ = d.Nack(false, false)
-			} else if !ok {
-				_ = d.Nack(false, true)
-			} else {
-				_ = d.Ack(false)
-			}
-		}
-	}()
-
-	withdraws, err := conn.Channel.Consume(h.Withdraw.Name, "withdraw-consumer", false, false,
+func (c BalanceOperationConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
+	deposits, err := conn.Channel.Consume(c.Deposit.Name, "deposit-consumer", false, false,
 		false, false, nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	go func() {
-		for w := range withdraws {
-			ok, err2 := handleWithdraw(w, db)
-			if err2 != nil {
-				_ = w.Nack(false, false)
-			} else if !ok {
-				_ = w.Nack(false, true)
-			} else {
-				_ = w.Ack(false)
+	withdraws, err := conn.Channel.Consume(c.Withdraw.Name, "withdraw-consumer", false, false,
+		false, false, nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < c.Concurrency; i++ {
+		go func() {
+			for d := range deposits {
+				ok, err2 := handleDeposit(d, db)
+				if err2 != nil {
+					_ = d.Nack(false, false)
+				} else if !ok {
+					_ = d.Nack(false, true)
+				} else {
+					_ = d.Ack(false)
+				}
 			}
-		}
-	}()
+		}()
+	}
+
+	for i := 0; i < c.Concurrency; i++ {
+		go func() {
+			for w := range withdraws {
+				ok, err2 := handleWithdraw(w, db)
+				if err2 != nil {
+					_ = w.Nack(false, false)
+				} else if !ok {
+					_ = w.Nack(false, true)
+				} else {
+					_ = w.Ack(false)
+				}
+			}
+		}()
+	}
 
 	forever := make(chan bool)
 	<-forever
 
 	return nil
+}
+
+func (c BalanceOperationConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error) {
+	err := <-closed
+	if err != nil {
+		log.Errorf("closed mq connection: %v", err)
+
+		var i int
+
+		for i = 0; i < cfg.MaxReconnect; i++ {
+			log.Info("attempting to reconnect to mq")
+
+			if conn, err := mq.NewConnection(cfg); err == nil {
+				log.Info("reconnected to mq")
+				_ = c.StartConsume(conn, db)
+			}
+
+			time.Sleep(1 * time.Second)
+		}
+
+		if i == cfg.MaxReconnect {
+			log.Error("reached max attempts, unable to reconnect to mq")
+			return
+		}
+	} else {
+		log.Info("mq connection closed normally, will not reconnect")
+		os.Exit(0)
+	}
 }
 
 func handleDeposit(d amqp.Delivery, db *sqlx.DB) (bool, error) {
