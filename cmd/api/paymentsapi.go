@@ -4,16 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/handlers"
 	"github.com/tamasbrandstadter/payments-api/internal/db"
+	"github.com/tamasbrandstadter/payments-api/internal/mq"
 )
 
 func main() {
@@ -30,8 +27,7 @@ func main() {
 		ShutdownTimeout time.Duration `envconfig:"SHUTDOWN_TIMEOUT" default:"5s"`
 	}
 	if err := envconfig.Process("APP", &cfg); err != nil {
-		err = errors.Wrap(err, "parse environment variables")
-		return
+		log.Fatal("parse environment variables: ", err)
 	}
 
 	dbCfg := db.Config{
@@ -42,8 +38,7 @@ func main() {
 	}
 	dbc, err := db.NewConnection(dbCfg)
 	if err != nil {
-		err = errors.Wrap(err, "connect to postgres db")
-		return
+		log.Fatal("connect to postgres db: ", err)
 	}
 
 	defer func() {
@@ -60,26 +55,29 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	// Start listening for requests made to the daemon and create a channel
-	// to collect non-HTTP related server errors on.
-	serverErrors := make(chan error, 1)
+	conn, err := mq.GetConn("amqp://guest:guest@localhost:5672")
+	if err != nil {
+		log.Fatal("connect to mq: ", err)
+	}
+
+	deposit, withdraw, err := conn.DeclareQueues()
+	if err != nil {
+		log.Fatal("unable to declare queues: ", err)
+	}
+	balanceHandler := handlers.BalanceOperationConsumer{
+		Deposit: deposit,
+		Withdraw: withdraw,
+	}
+
 	go func() {
 		log.Printf("server started, listening on %s", server.Addr)
-		serverErrors <- server.ListenAndServe()
+		err = server.ListenAndServe()
+		if err != nil {
+			log.Fatal("server failed to start: ", err)
+		}
 	}()
 
-	// Blocking main and waiting for shutdown of the daemon.
-	osSignals := make(chan os.Signal, 1)
-	signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
-
-	// Waiting for an osSignal or a non-HTTP related server error.
-	select {
-	case e := <-serverErrors:
-		err = fmt.Errorf("server failed to start: %+v", e)
-		return
-
-	case <-osSignals:
-	}
+	balanceHandler.StartConsumers(conn, dbc)
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
