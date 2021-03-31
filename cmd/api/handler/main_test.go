@@ -4,11 +4,22 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/balance"
+	"github.com/tamasbrandstadter/payments-api/internal/mq"
 	"github.com/tamasbrandstadter/payments-api/internal/testdb"
+	"github.com/tamasbrandstadter/payments-api/internal/testmq"
 )
 
-var a *Application
+type TestApp struct {
+	Handler *Application
+	DB      *sqlx.DB
+	Conn    mq.Conn
+	Tc      balance.TransactionConsumer
+}
+
+var a *TestApp
 
 func TestMain(m *testing.M) {
 	os.Exit(testMain(m))
@@ -22,7 +33,37 @@ func testMain(m *testing.M) int {
 	}
 	defer dbc.Close()
 
-	a = NewApplication(dbc)
+	conn, err := testmq.Open()
+	if err != nil {
+		log.WithError(err).Info("create test mq connection")
+		return 1
+	}
 
-	return m.Run()
+	deposit, withdraw, err := conn.DeclareQueues(5)
+	tc := balance.TransactionConsumer{
+		Deposit:     deposit,
+		Withdraw:    withdraw,
+		Concurrency: 5,
+	}
+
+	a = &TestApp{
+		Handler: NewApplication(dbc),
+		DB:      dbc,
+		Conn:    conn,
+		Tc:      tc,
+	}
+
+	code := m.Run()
+
+	deleteRecords()
+
+	return code
+}
+
+func deleteRecords() {
+	a.DB.Exec("DELETE FROM accounts")
+	a.DB.Exec("ALTER SEQUENCE accounts_id_seq RESTART WITH 1")
+
+	a.DB.Exec("DELETE FROM customers")
+	a.DB.Exec("ALTER SEQUENCE customers_id_seq RESTART WITH 1")
 }

@@ -7,36 +7,25 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/streadway/amqp"
 	"github.com/stretchr/testify/assert"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
 	"github.com/tamasbrandstadter/payments-api/internal/testdb"
 )
 
-func TestFindAllAccountsEmpty(t *testing.T) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/accounts"), nil)
-	if err != nil {
-		t.Errorf("error creating request: %v", err)
-	}
-
-	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
-
-	if e, a := http.StatusOK, w.Code; e != a {
-		t.Errorf("expected status code: %v, got status code: %v", e, a)
-	}
-
-	var accounts []account.Account
-	if err := json.NewDecoder(w.Body).Decode(&accounts); err != nil {
-		t.Errorf("error decoding response body: %v", err)
-	}
-
-	assert.Empty(t, accounts)
-}
-
 func TestGetAccountById(t *testing.T) {
-	err := testdb.SaveCustomerWithAccount(a.DB)
+	r := account.AccCreationRequest{
+		FirstName:      "first15",
+		LastName:       "last15",
+		Email:          "test15@test15.com",
+		InitialBalance: 999,
+		Currency:       "EUR",
+	}
+
+	err := testdb.SaveCustomerWithAccount(a.DB, r)
 	if err != nil {
 		t.Errorf("error creating test customer with account: %v", err)
 	}
@@ -47,7 +36,7 @@ func TestGetAccountById(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusOK, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -80,7 +69,7 @@ func TestGetAccountByIdNotFound(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusNotFound, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -101,7 +90,7 @@ func TestGetAccountByIdWithInvalidId(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusBadRequest, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -122,7 +111,7 @@ func TestFindAllAccounts(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusOK, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -156,7 +145,7 @@ func TestCreateAccountForCustomer(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusCreated, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -198,7 +187,7 @@ func TestCreateAccountForCustomerInvalidPayload(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusBadRequest, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -230,7 +219,7 @@ func TestCreateAccountForCustomerErrorInName(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusBadRequest, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -264,7 +253,7 @@ func TestCreateAccountForCustomerErrorUnsupportedCurrency(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusBadRequest, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -298,7 +287,7 @@ func TestCreateAccountForCustomerDuplicateEmail(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusConflict, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -332,7 +321,7 @@ func TestCreateAccountForCustomerWithNegativeInitialBalance(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusBadRequest, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -353,7 +342,7 @@ func TestFindAllAccountsAfterCreation(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusOK, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -366,7 +355,7 @@ func TestFindAllAccountsAfterCreation(t *testing.T) {
 
 	assert.Len(t, accounts, 2)
 
-	_ = testdb.DeleteTestAccount(a.DB)
+	_ = testdb.DeleteTestAccount(a.DB, 1)
 }
 
 func TestFreezeAccount(t *testing.T) {
@@ -376,7 +365,7 @@ func TestFreezeAccount(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusOK, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -411,7 +400,7 @@ func TestFreezeAccountNotFound(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusNotFound, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -432,7 +421,7 @@ func TestFreezeAccountInvalidId(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusBadRequest, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -453,7 +442,7 @@ func TestDeleteAccount(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusNoContent, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -467,7 +456,7 @@ func TestDeleteAccountNotFond(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusNotFound, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -488,7 +477,7 @@ func TestDeleteAccountInvalidId(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	a.ServeHTTP(w, req)
+	a.Handler.ServeHTTP(w, req)
 
 	if e, a := http.StatusBadRequest, w.Code; e != a {
 		t.Errorf("expected status code: %v, got status code: %v", e, a)
@@ -500,4 +489,76 @@ func TestDeleteAccountInvalidId(t *testing.T) {
 	}
 
 	assert.Equal(t, "unable to parse account id", response["error"])
+}
+
+func TestFindAllAccountsEmpty(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/accounts"), nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.Handler.ServeHTTP(w, req)
+
+	if e, a := http.StatusOK, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var accounts []account.Account
+	if err := json.NewDecoder(w.Body).Decode(&accounts); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Empty(t, accounts)
+}
+
+func TestDeposit(t *testing.T) {
+	r := account.AccCreationRequest{
+		FirstName:      "first1",
+		LastName:       "last1",
+		Email:          "test1@test1.com",
+		InitialBalance: 999,
+		Currency:       "EUR",
+	}
+
+	err := testdb.SaveCustomerWithAccount(a.DB, r)
+	if err != nil {
+		t.Errorf("error creating test customer with account: %v", err)
+	}
+
+	msg := []byte("{\"id\":3,\"amount\":1}")
+	err = a.Conn.Channel.Publish("payments", "dep", false, false, amqp.Publishing{
+		Body:         msg,
+		ContentType:  "application/json",
+		DeliveryMode: amqp.Persistent,
+	})
+
+	go func() {
+		_ = a.Tc.StartConsume(a.Conn, a.DB)
+	}()
+
+	time.Sleep(time.Second / 2)
+
+	acc, err := testdb.SelectById(a.DB, 3)
+	if err != nil {
+		t.Errorf("expected err nil, got %v", err)
+	}
+	assert.Equal(t, 1000.0, acc.Balance)
+}
+
+func TestWithdraw(t *testing.T) {
+	msg := []byte("{\"id\":3,\"amount\":2}")
+	err := a.Conn.Channel.Publish("payments", "wit", false, false, amqp.Publishing{
+		Body:         msg,
+		ContentType:  "application/json",
+		DeliveryMode: amqp.Persistent,
+	})
+
+	time.Sleep(time.Second / 2)
+
+	acc, err := testdb.SelectById(a.DB, 3)
+	if err != nil {
+		t.Errorf("expected err nil, got %v", err)
+	}
+	assert.Equal(t, 998.0, acc.Balance)
 }

@@ -1,7 +1,6 @@
 package testmq
 
 import (
-	log "github.com/sirupsen/logrus"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
 )
 
@@ -27,7 +26,6 @@ func Open() (mq.Conn, error) {
 
 	conn, err := mq.NewConnection(cfg)
 	if err != nil {
-		log.Errorf("error connecting to test mq: %v", err)
 		return mq.Conn{}, err
 	}
 

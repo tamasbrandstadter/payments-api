@@ -30,13 +30,13 @@ func Open() (*sqlx.DB, error) {
 	})
 }
 
-func SaveCustomerWithAccount(dbc *sqlx.DB) error {
+func SaveCustomerWithAccount(dbc *sqlx.DB, r account.AccCreationRequest) error {
 	stmt, err := dbc.Prepare("INSERT INTO customers(first_name, last_name, email, created_at, modified_at) VALUES($1,$2,$3,$4,$5) RETURNING id;")
 	if err != nil {
 		return err
 	}
 
-	row := stmt.QueryRow("first", "last", "test@test.com", TestTime, TestTime)
+	row := stmt.QueryRow(r.FirstName, r.LastName, r.Email, TestTime, TestTime)
 	err = row.Err()
 	if err := stmt.Close(); err != nil {
 		return err
@@ -47,7 +47,7 @@ func SaveCustomerWithAccount(dbc *sqlx.DB) error {
 		return err
 	}
 
-	row = stmt.QueryRow(1, 999.0, "EUR", TestTime, TestTime)
+	row = stmt.QueryRow(1, r.InitialBalance, r.Currency, TestTime, TestTime)
 
 	var id int
 	if err = row.Scan(&id); err != nil {
@@ -65,13 +65,13 @@ func SaveCustomerWithAccount(dbc *sqlx.DB) error {
 	return nil
 }
 
-func DeleteTestAccount(dbc *sqlx.DB) error {
+func DeleteTestAccount(dbc *sqlx.DB, id int) error {
 	stmt, err := dbc.Prepare("DELETE FROM accounts WHERE id=$1")
 	if err != nil {
 		return err
 	}
 
-	if _, err = stmt.Exec(1); err != nil {
+	if _, err = stmt.Exec(id); err != nil {
 		return err
 	}
 
