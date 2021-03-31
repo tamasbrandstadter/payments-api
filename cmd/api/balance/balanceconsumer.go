@@ -166,7 +166,7 @@ func decodeMessage(d amqp.Delivery) (account.BalanceOperationRequest, error) {
 
 func validateAmount(amount float64) error {
 	if amount < 0 {
-		return errors.New("withdraw amount can't be negative")
+		return errors.New("balance operation amount can't be negative")
 	}
 	return nil
 }
