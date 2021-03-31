@@ -9,6 +9,6 @@ type AccCreationRequest struct {
 }
 
 type BalanceOperationRequest struct {
-	ID     int     `json:"id"`
-	Amount float64 `json:"amount"`
+	AccountID int     `json:"id"`
+	Amount    float64 `json:"amount"`
 }

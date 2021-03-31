@@ -5,33 +5,36 @@ import (
 )
 
 const (
-	exchange  = "payments"
-	deposits  = "deposits"
-	withdraws = "withdraws"
+	paymentsExchangeName = "payments"
+	depositQueueName     = "deposits"
+	withdrawQueueName    = "withdraws"
+	kind                 = "topic"
+	depositRouteKey      = "dep"
+	withdrawRouteKey     = "wit"
 )
 
 func (conn Conn) DeclareQueues(concurrency int) (amqp.Queue, amqp.Queue, error) {
-	err := conn.Channel.ExchangeDeclare(exchange, "topic", true, false, false, false, nil)
+	err := conn.Channel.ExchangeDeclare(paymentsExchangeName, kind, true, false, false, false, nil)
 	if err != nil {
 		return amqp.Queue{}, amqp.Queue{}, err
 	}
 
-	deposit, err := conn.Channel.QueueDeclare(deposits, true, false, false, false, nil)
+	deposit, err := conn.Channel.QueueDeclare(depositQueueName, true, false, false, false, nil)
 	if err != nil {
 		return amqp.Queue{}, amqp.Queue{}, err
 	}
 
-	err = conn.Channel.QueueBind(deposits, "dep", exchange, false, nil)
+	err = conn.Channel.QueueBind(depositQueueName, depositRouteKey, paymentsExchangeName, false, nil)
 	if err != nil {
 		return amqp.Queue{}, amqp.Queue{}, err
 	}
 
-	withdraw, err := conn.Channel.QueueDeclare(withdraws, true, false, false, false, nil)
+	withdraw, err := conn.Channel.QueueDeclare(withdrawQueueName, true, false, false, false, nil)
 	if err != nil {
 		return amqp.Queue{}, amqp.Queue{}, err
 	}
 
-	err = conn.Channel.QueueBind(withdraws, "wit", exchange, false, nil)
+	err = conn.Channel.QueueBind(withdrawQueueName, withdrawRouteKey, paymentsExchangeName, false, nil)
 	if err != nil {
 		return amqp.Queue{}, amqp.Queue{}, err
 	}

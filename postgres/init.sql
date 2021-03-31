@@ -21,3 +21,14 @@ CREATE TABLE accounts
     created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT (now() at time zone 'utc'),
     modified_at TIMESTAMP WITHOUT TIME ZONE
 );
+
+CREATE TABLE transactions
+(
+    id         SERIAL PRIMARY KEY,
+    account_id SERIAL,
+    CONSTRAINT fk_account
+        FOREIGN KEY (account_id)
+            REFERENCES accounts (id),
+    ack        BOOLEAN,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (now() at time zone 'utc')
+)

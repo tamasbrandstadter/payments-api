@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/stretchr/testify/assert"
+	"github.com/tamasbrandstadter/payments-api/internal/mq"
 )
 
 func TestHandleDeposit(t *testing.T) {
@@ -40,7 +41,7 @@ func TestHandleDeposit(t *testing.T) {
 	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(16.5, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	ok, err := handleDeposit(d, db)
+	ok, err := handleDeposit(d, db, mq.Conn{})
 	if !ok || err != nil {
 		t.Errorf("ok true and err nil was expected got: %v and %v", ok, err)
 	}
@@ -57,7 +58,7 @@ func TestHandleDepositPayloadError(t *testing.T) {
 		Body:        msg,
 	}
 
-	ok, err := handleDeposit(d, db)
+	ok, err := handleDeposit(d, db, mq.Conn{})
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid message payload, unable to parse", err.Error())
@@ -74,7 +75,7 @@ func TestHandleDepositAmountError(t *testing.T) {
 		Body:        msg,
 	}
 
-	ok, err := handleDeposit(d, db)
+	ok, err := handleDeposit(d, db, mq.Conn{})
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "balance operation amount can't be negative", err.Error())
@@ -99,7 +100,7 @@ func TestHandleDepositNotFoundError(t *testing.T) {
 	mock.ExpectQuery(selectQuery).WithArgs(accId).WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
-	ok, err := handleDeposit(d, db)
+	ok, err := handleDeposit(d, db, mq.Conn{})
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "account id 1 is not found", err.Error())
@@ -124,7 +125,7 @@ func TestHandleDepositServerError(t *testing.T) {
 	mock.ExpectQuery(selectQuery).WithArgs(accId).WillReturnError(errors.New("test"))
 	mock.ExpectRollback()
 
-	ok, err := handleDeposit(d, db)
+	ok, err := handleDeposit(d, db, mq.Conn{})
 	assert.False(t, ok)
 	assert.Nil(t, err)
 }

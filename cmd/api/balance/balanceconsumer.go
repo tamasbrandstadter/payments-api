@@ -13,7 +13,14 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/audit"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/notification"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
+)
+
+const (
+	depositConsumer  = "deposit-consumer"
+	withdrawConsumer = "withdraw-consumer"
 )
 
 type TransactionConsumer struct {
@@ -23,14 +30,14 @@ type TransactionConsumer struct {
 }
 
 func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
-	deposits, err := conn.Channel.Consume(tc.Deposit.Name, "deposit-consumer", false, false,
+	deposits, err := conn.Channel.Consume(tc.Deposit.Name, depositConsumer, false, false,
 		false, false, nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	withdraws, err := conn.Channel.Consume(tc.Withdraw.Name, "withdraw-consumer", false, false,
+	withdraws, err := conn.Channel.Consume(tc.Withdraw.Name, withdrawConsumer, false, false,
 		false, false, nil,
 	)
 	if err != nil {
@@ -40,7 +47,7 @@ func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
 	for i := 0; i < tc.Concurrency; i++ {
 		go func() {
 			for d := range deposits {
-				ok, err2 := handleDeposit(d, db)
+				ok, err2 := handleDeposit(d, db, conn)
 				if err2 != nil {
 					_ = d.Nack(false, false)
 				} else if !ok {
@@ -101,7 +108,7 @@ func (tc TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.D
 	}
 }
 
-func handleDeposit(d amqp.Delivery, db *sqlx.DB) (bool, error) {
+func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 	payload, err := decodeMessage(d)
 	if err != nil {
 		return false, err
@@ -112,15 +119,22 @@ func handleDeposit(d amqp.Delivery, db *sqlx.DB) (bool, error) {
 		return false, err
 	}
 
-	_, err = account.Deposit(db, payload.ID, payload.Amount)
+	_, err = account.Deposit(db, payload.AccountID, payload.Amount)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.ID))
+			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.AccountID))
 		}
 		return false, nil
 	}
 
-	log.Infof("successfully deposited amount %.2f to account %d", payload.Amount, payload.ID)
+	log.Infof("successfully deposited amount %.2f to account %d", payload.Amount, payload.AccountID)
+
+	auditTx, err := audit.SaveAuditTx(db, payload.AccountID, true)
+	if err != nil {
+		log.Errorf("failed to save audit tx record: %v", err)
+	} else {
+		notification.PublishNotification(conn, *auditTx)
+	}
 	return true, nil
 }
 
@@ -135,10 +149,10 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB) (bool, error) {
 		return false, err
 	}
 
-	_, err = account.Withdraw(db, payload.ID, payload.Amount)
+	_, err = account.Withdraw(db, payload.AccountID, payload.Amount)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.ID))
+			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.AccountID))
 		}
 
 		fe, ok := err.(*account.FundsError)
@@ -149,7 +163,8 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB) (bool, error) {
 		return false, nil
 	}
 
-	log.Infof("successfully withdrew amount %.2f from account %d", payload.Amount, payload.ID)
+	log.Infof("successfully withdrew amount %.2f from account %d", payload.Amount, payload.AccountID)
+
 	return true, nil
 }
 
