@@ -73,4 +73,6 @@ func PublishSuccessfulTxNotification(conn mq.Conn, txId int, accId int, createdA
 		)
 	}
 
+	log.Info("successfully sent notification for tx id %d with message id %s", n.TransactionId, id)
+
 }

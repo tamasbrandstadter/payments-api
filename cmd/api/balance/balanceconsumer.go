@@ -126,8 +126,6 @@ func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 		return false, nil
 	}
 
-	log.Infof("successfully deposited amount %.2f to account %d", payload.Amount, payload.AccountID)
-
 	if err = audit.SaveAuditRecord(db, payload.AccountID, conn); err != nil {
 		log.Errorf("error saving audit record: %v", err)
 	}
@@ -159,8 +157,6 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 
 		return false, nil
 	}
-
-	log.Infof("successfully withdrew amount %.2f from account %d", payload.Amount, payload.AccountID)
 
 	if err = audit.SaveAuditRecord(db, payload.AccountID, conn); err != nil {
 		log.Errorf("error saving audit record: %v", err)

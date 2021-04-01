@@ -93,13 +93,15 @@ func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error
 
 	if err = row.Scan(&acc.ID); err != nil {
 		_ = tx.Rollback()
-		log.Warnf("account creation for customer id %d was rolled back", customerId)
+		log.Warnf("account creation for customer id %d was rolled back, error: %v", customerId, err)
 		return Account{}, err
 	}
 	if err = tx.Commit(); err != nil {
-		log.Error("failed to commit account creation, error: ", err)
+		log.Errorf("failed to commit account creation for customer id %d, error: %v", customerId, err)
 		return Account{}, err
 	}
+
+	log.Infof("successfully created account with id %d for customer id %d", acc.ID, acc.CustomerID)
 
 	return acc, nil
 }
@@ -116,14 +118,17 @@ func Delete(dbc *sqlx.DB, id int) error {
 
 	if _, err = tx.Exec(deleteById, id); err != nil {
 		_ = tx.Rollback()
-		log.Warnf("account deletion for id %d was rolled back", id)
+		log.Warnf("account deletion for id %d was rolled back, error: %v", id, err)
 		return err
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Error("failed to commit account deletion, error: ", err)
+		log.Errorf("failed to commit account deletion for account id %d, error: %v", id, err)
 		return err
 	}
+
+	log.Infof("successfully deleted account with id %d", id)
+
 	return nil
 }
 
@@ -148,17 +153,19 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 
 	if _, err = stmt.Exec(modifiedAt, id); err != nil {
 		_ = tx.Rollback()
-		log.Warnf("freeze account for id %d was rolled back", id)
+		log.Warnf("freeze account for id %d was rolled back %v", id, err)
 		return Account{}, err
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Error("failed to commit account freeze, error: ", err)
+		log.Errorf("failed to commit account freeze for account id %d, error: %v", id, err)
 		return Account{}, err
 	}
 
 	acc.ModifiedAt = modifiedAt
 	acc.Frozen = true
+
+	log.Infof("successfully frozen account with id %d", id)
 
 	return acc, nil
 }
@@ -195,17 +202,19 @@ func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 
 	if _, err = stmt.Exec(newBalance, modifiedAt, id); err != nil {
 		_ = tx.Rollback()
-		log.Warnf("deposit for account id %d was rolled back", id)
+		log.Warnf("deposit for account id %d was rolled back, error: %v", id, err)
 		return Account{}, err
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Error("failed to commit deposit to account, error: ", err)
+		log.Errorf("failed to commit deposit to account id %d, error: %v", id, err)
 		return Account{}, err
 	}
 
 	acc.ModifiedAt = modifiedAt
 	acc.Balance = newBalance
+
+	log.Infof("successfully deposited amount %.2f to account id %d", amount, id)
 
 	return acc, nil
 }
@@ -235,7 +244,7 @@ func Withdraw(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 	newBalance := acc.Balance - amount
 	if newBalance < 0 {
 		_ = tx.Rollback()
-		log.Warnf("withdraw for account id %d was rolled back", id)
+		log.Warnf("withdraw for account id %d was rolled back due to insufficient funds", id)
 		return Account{}, &FundsError{Balance: acc.Balance}
 	}
 	modifiedAt := time.Now().UTC()
@@ -248,17 +257,19 @@ func Withdraw(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 
 	if _, err = stmt.Exec(newBalance, modifiedAt, id); err != nil {
 		_ = tx.Rollback()
-		log.Warnf("withdraw from account id %d was rolled back", id)
+		log.Warnf("withdraw from account id %d was rolled back, error: %v", id, err)
 		return Account{}, err
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Error("failed to commit withdraw from account, error: ", err)
+		log.Errorf("failed to commit withdraw from account, error: %v", err)
 		return Account{}, err
 	}
 
 	acc.ModifiedAt = modifiedAt
 	acc.Balance = newBalance
+
+	log.Infof("successfully withdrew amount %.2f from account %d", amount, id)
 
 	return acc, nil
 }

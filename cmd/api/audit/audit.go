@@ -40,13 +40,15 @@ func SaveAuditRecord(db *sqlx.DB, accId int, conn mq.Conn) error {
 
 	if err = row.Scan(&audit.transactionId); err != nil {
 		_ = tx.Rollback()
-		log.Warnf("audit tx record creation for account id %d was rolled back", accId)
+		log.Warnf("audit tx record creation for account id %d was rolled back, error: %v", accId, err)
 		return err
 	}
 	if err = tx.Commit(); err != nil {
-		log.Error("failed to commit audit tx record creation, error: ", err)
+		log.Errorf("failed to commit audit tx record creation, error: %v", err)
 		return err
 	}
+
+	log.Infof("successfully saved audit record for account id %d with tx id %d", accId, audit.transactionId)
 
 	notification.PublishSuccessfulTxNotification(conn, audit.transactionId, audit.accountID, audit.createdAt)
 

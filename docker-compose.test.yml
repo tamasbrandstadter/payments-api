@@ -11,9 +11,7 @@ services:
     image: postgres:latest
     container_name: db
     ports:
-      - "5432:5432"
-    expose:
-      - "5432"
+      - 5432:5432
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root

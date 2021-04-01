@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
 )
 
@@ -33,7 +33,7 @@ func Create(dbc *sqlx.DB, ar account.AccCreationRequest) (Customer, error) {
 
 	defer func() {
 		if err := stmt.Close(); err != nil {
-			logrus.WithError(err).Info("create customer")
+			log.WithError(err).Info("create customer")
 		}
 	}()
 
@@ -42,6 +42,8 @@ func Create(dbc *sqlx.DB, ar account.AccCreationRequest) (Customer, error) {
 	if err = row.Scan(&c.ID); err != nil {
 		return Customer{}, err
 	}
+
+	log.Infof("successfully created customer with email %s and id %d", c.Email, c.ID)
 
 	return c, nil
 }
