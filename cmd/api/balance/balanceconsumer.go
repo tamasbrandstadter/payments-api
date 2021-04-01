@@ -14,7 +14,6 @@ import (
 	"github.com/streadway/amqp"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/audit"
-	"github.com/tamasbrandstadter/payments-api/cmd/api/notification"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
 )
 
@@ -62,7 +61,7 @@ func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
 	for i := 0; i < tc.Concurrency; i++ {
 		go func() {
 			for w := range withdraws {
-				ok, err2 := handleWithdraw(w, db)
+				ok, err2 := handleWithdraw(w, db, conn)
 				if err2 != nil {
 					_ = w.Nack(false, false)
 				} else if !ok {
@@ -129,16 +128,14 @@ func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 
 	log.Infof("successfully deposited amount %.2f to account %d", payload.Amount, payload.AccountID)
 
-	auditTx, err := audit.SaveAuditTx(db, payload.AccountID, true)
-	if err != nil {
-		log.Errorf("failed to save audit tx record: %v", err)
-	} else {
-		notification.PublishNotification(conn, *auditTx)
+	if err = audit.SaveAuditRecord(db, payload.AccountID, conn); err != nil {
+		log.Errorf("error saving audit record: %v", err)
 	}
+
 	return true, nil
 }
 
-func handleWithdraw(d amqp.Delivery, db *sqlx.DB) (bool, error) {
+func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 	payload, err := decodeMessage(d)
 	if err != nil {
 		return false, err
@@ -165,15 +162,19 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB) (bool, error) {
 
 	log.Infof("successfully withdrew amount %.2f from account %d", payload.Amount, payload.AccountID)
 
+	if err = audit.SaveAuditRecord(db, payload.AccountID, conn); err != nil {
+		log.Errorf("error saving audit record: %v", err)
+	}
+
 	return true, nil
 }
 
-func decodeMessage(d amqp.Delivery) (account.BalanceOperationRequest, error) {
-	var payload account.BalanceOperationRequest
+func decodeMessage(d amqp.Delivery) (TxMessage, error) {
+	var payload TxMessage
 
 	r := bytes.NewReader(d.Body)
 	if err := json.NewDecoder(r).Decode(&payload); err != nil {
-		return account.BalanceOperationRequest{}, errors.New("invalid message payload, unable to parse")
+		return TxMessage{}, errors.New("invalid message payload, unable to parse")
 	}
 
 	return payload, nil

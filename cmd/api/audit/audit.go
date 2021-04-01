@@ -7,44 +7,48 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/notification"
+	"github.com/tamasbrandstadter/payments-api/internal/mq"
 )
 
-type TxAudit struct {
-	ID        int       `json:"id" db:"id"`
-	AccountID int       `json:"accountId" db:"account_id"`
-	Ack       bool      `json:"ack" db:"ack"`
-	CreatedAt time.Time `json:"createdAt" db:"created_at"`
+type TxRecord struct {
+	transactionId int       `db:"id"`
+	accountID     int       `db:"account_id"`
+	ack           bool      `db:"ack"`
+	createdAt     time.Time `db:"created_at"`
 }
 
-func SaveAuditTx(db *sqlx.DB, accId int, ack bool) (*TxAudit, error) {
+func SaveAuditRecord(db *sqlx.DB, accId int, conn mq.Conn) error {
 	tx, err := db.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelDefault})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	audit := TxAudit{
-		AccountID: accId,
-		Ack:       ack,
-		CreatedAt: time.Now().UTC(),
+	audit := TxRecord{
+		accountID: accId,
+		ack:       true,
+		createdAt: time.Now().UTC(),
 	}
 
 	stmt, err := tx.Prepare(insert)
 	if err != nil {
 		_ = tx.Rollback()
-		return nil, err
+		return err
 	}
 
-	row := stmt.QueryRow(audit.AccountID, audit.Ack, audit.CreatedAt)
+	row := stmt.QueryRow(audit.accountID, audit.ack, audit.createdAt)
 
-	if err = row.Scan(&audit.ID); err != nil {
+	if err = row.Scan(&audit.transactionId); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("audit tx record creation for account id %d was rolled back", accId)
-		return nil, err
+		return err
 	}
 	if err = tx.Commit(); err != nil {
 		log.Error("failed to commit audit tx record creation, error: ", err)
-		return nil, err
+		return err
 	}
 
-	return &audit, nil
+	notification.PublishSuccessfulTxNotification(conn, audit.transactionId, audit.accountID, audit.createdAt)
+
+	return nil
 }

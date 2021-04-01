@@ -81,7 +81,7 @@ func main() {
 	}
 
 	go func() {
-		log.Infof("server started, listening on %s", server.Addr)
+		log.Infof("server started successfully, listening on %s", server.Addr)
 		err = server.ListenAndServe()
 		if err != nil {
 			log.Errorf("server failed to start: %v", err)

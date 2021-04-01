@@ -7,8 +7,3 @@ type AccCreationRequest struct {
 	InitialBalance float64  `json:"balance"`
 	Currency       Currency `json:"currency"`
 }
-
-type BalanceOperationRequest struct {
-	AccountID int     `json:"id"`
-	Amount    float64 `json:"amount"`
-}

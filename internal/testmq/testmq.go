@@ -5,13 +5,13 @@ import (
 )
 
 const (
-	user = "guest"
-
+	user     = "guest"
 	password = "guest"
-
-	host = "localhost"
-
-	port = 5672
+	host     = "localhost"
+	port     = 5672
+	queue    = "test-queue"
+	exchange = "balance-notifications"
+	topic    = "topic"
 )
 
 func Open() (mq.Conn, error) {
@@ -25,6 +25,21 @@ func Open() (mq.Conn, error) {
 	}
 
 	conn, err := mq.NewConnection(cfg)
+	if err != nil {
+		return mq.Conn{}, err
+	}
+
+	err = conn.Channel.ExchangeDeclare(exchange, topic, true, false, false, false, nil)
+	if err != nil {
+		return mq.Conn{}, err
+	}
+
+	q, err := conn.Channel.QueueDeclare(queue, false, false, false, false, nil)
+	if err != nil {
+		return mq.Conn{}, err
+	}
+
+	err = conn.Channel.QueueBind(q.Name, "notif", exchange, false, nil)
 	if err != nil {
 		return mq.Conn{}, err
 	}

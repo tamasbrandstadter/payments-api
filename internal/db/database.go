@@ -24,16 +24,16 @@ func NewConnection(cfg Config) (*sqlx.DB, error) {
 	conn := fmt.Sprintf("user=%s password=%s dbname=%s port=%d sslmode=disable",
 		cfg.User, cfg.Pass, cfg.Name, cfg.Port)
 
-	log.Info("connecting to database...")
+	log.Info("connecting to db")
 	if db, err = sqlx.Connect("postgres", conn); err != nil {
 		return nil, err
 	}
 
-	log.Info("verifying connection...")
+	log.Info("verifying db connection")
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
 
-	log.Info("verified postgres connection")
+	log.Info("verified db connection")
 	return db, nil
 }

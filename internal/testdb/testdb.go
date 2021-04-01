@@ -11,11 +11,8 @@ import (
 
 const (
 	databaseUser = "root"
-
 	databasePass = "root"
-
 	databaseName = "testdb"
-
 	databasePort = 5432
 )
 
