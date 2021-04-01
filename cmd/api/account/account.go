@@ -35,20 +35,20 @@ type Account struct {
 	Frozen     bool      `json:"frozen" db:"frozen"`
 }
 
-func SelectAll(dbc *sqlx.DB) ([]Account, error) {
+func SelectAll(db *sqlx.DB) ([]Account, error) {
 	accounts := make([]Account, 0)
 
-	if err := dbc.Select(&accounts, selectAll); err != nil {
+	if err := db.Select(&accounts, selectAll); err != nil {
 		return nil, err
 	}
 
 	return accounts, nil
 }
 
-func SelectById(dbc *sqlx.DB, id int) (Account, error) {
+func SelectById(db *sqlx.DB, id int) (Account, error) {
 	var acc Account
 
-	pStmt, err := dbc.Preparex(selectById)
+	pStmt, err := db.Preparex(selectById)
 	if err != nil {
 		return Account{}, err
 	}
@@ -68,8 +68,8 @@ func SelectById(dbc *sqlx.DB, id int) (Account, error) {
 	return acc, nil
 }
 
-func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error) {
-	tx, err := dbc.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+func Create(db *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error) {
+	tx, err := db.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return Account{}, err
 	}
@@ -106,12 +106,12 @@ func Create(dbc *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error
 	return acc, nil
 }
 
-func Delete(dbc *sqlx.DB, id int) error {
-	if _, err := SelectById(dbc, id); errors.Cause(err) == sql.ErrNoRows {
+func Delete(db *sqlx.DB, id int) error {
+	if _, err := SelectById(db, id); errors.Cause(err) == sql.ErrNoRows {
 		return sql.ErrNoRows
 	}
 
-	tx, err := dbc.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	tx, err := db.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return err
 	}
@@ -132,13 +132,13 @@ func Delete(dbc *sqlx.DB, id int) error {
 	return nil
 }
 
-func Freeze(dbc *sqlx.DB, id int) (Account, error) {
-	acc, err := SelectById(dbc, id)
+func Freeze(db *sqlx.DB, id int) (Account, error) {
+	acc, err := SelectById(db, id)
 	if errors.Cause(err) == sql.ErrNoRows {
 		return Account{}, sql.ErrNoRows
 	}
 
-	tx, err := dbc.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	tx, err := db.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return Account{}, err
 	}
@@ -170,11 +170,11 @@ func Freeze(dbc *sqlx.DB, id int) (Account, error) {
 	return acc, nil
 }
 
-func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
+func Deposit(db *sqlx.DB, id int, amount float64) (Account, error) {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
 	defer cancelFunc()
 
-	tx, err := dbc.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	tx, err := db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return Account{}, err
 	}
@@ -219,11 +219,11 @@ func Deposit(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 	return acc, nil
 }
 
-func Withdraw(dbc *sqlx.DB, id int, amount float64) (Account, error) {
+func Withdraw(db *sqlx.DB, id int, amount float64) (Account, error) {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
 	defer cancelFunc()
 
-	tx, err := dbc.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	tx, err := db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return Account{}, err
 	}
@@ -272,4 +272,8 @@ func Withdraw(dbc *sqlx.DB, id int, amount float64) (Account, error) {
 	log.Infof("successfully withdrew amount %.2f from account %d", amount, id)
 
 	return acc, nil
+}
+
+func Transfer(db *sqlx.DB, from int, to int, amount float64) error {
+	
 }

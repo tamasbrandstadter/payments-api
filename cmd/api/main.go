@@ -61,7 +61,7 @@ func main() {
 		}
 	}()
 
-	deposit, withdraw, err := conn.DeclareQueues(mqCfg.Concurrency)
+	deposit, withdraw, transfer, err := conn.DeclareQueues(mqCfg.Concurrency)
 	if err != nil {
 		log.Errorf("error declaring queues: %v", err)
 		return
@@ -69,6 +69,7 @@ func main() {
 	tc := balance.TransactionConsumer{
 		Deposit:     deposit,
 		Withdraw:    withdraw,
+		Transfer:    transfer,
 		Concurrency: mqCfg.Concurrency,
 	}
 
@@ -89,10 +90,7 @@ func main() {
 		}
 	}()
 
-	err = tc.StartConsume(conn, dbc)
-	if err != nil {
-		log.Errorf("error starting consumers: %v", err)
-	}
+	tc.StartConsume(conn, dbc)
 	go tc.ClosedConnectionListener(mqCfg, dbc, conn.Channel.NotifyClose(make(chan *amqp.Error)))
 
 	ctx, cancel := context.WithTimeout(context.Background(), envCfg.ShutdownTimeout)

@@ -26,12 +26,12 @@ func TestMain(m *testing.M) {
 }
 
 func testMain(m *testing.M) int {
-	dbc, err := testdb.Open()
+	db, err := testdb.Open()
 	if err != nil {
 		log.WithError(err).Info("create test database connection")
 		return 1
 	}
-	defer dbc.Close()
+	defer db.Close()
 
 	conn, err := testmq.Open()
 	if err != nil {
@@ -47,8 +47,8 @@ func testMain(m *testing.M) int {
 	}
 
 	a = &TestApp{
-		Handler: NewApplication(dbc),
-		DB:      dbc,
+		Handler: NewApplication(db),
+		DB:      db,
 		Conn:    conn,
 		Tc:      tc,
 	}

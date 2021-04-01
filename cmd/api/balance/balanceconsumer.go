@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -20,23 +21,103 @@ import (
 const (
 	depositConsumer  = "deposit-consumer"
 	withdrawConsumer = "withdraw-consumer"
+	transferConsumer = "transfer-consumer"
 )
 
 type TransactionConsumer struct {
 	Deposit     amqp.Queue
 	Withdraw    amqp.Queue
+	Transfer    amqp.Queue
 	Concurrency int
 }
 
-func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
-	deposits, err := conn.Channel.Consume(tc.Deposit.Name, depositConsumer, false, false,
-		false, false, nil,
-	)
+func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) {
+	forever := make(chan bool)
+
+	err := tc.startDeposits(conn, db)
 	if err != nil {
-		return err
+		log.Errorf("error starting deposit consumer: %v", err)
+		attempt := 0
+		err = retry.Do(
+			func() error {
+				log.Infof("retrying to consume from deposits, attempt %b", attempt)
+				err = tc.startDeposits(conn, db)
+				if err != nil {
+					return err
+				}
+				return nil
+			},
+			retry.Attempts(10), retry.Delay(3*time.Second),
+		)
 	}
 
-	withdraws, err := conn.Channel.Consume(tc.Withdraw.Name, withdrawConsumer, false, false,
+	err = tc.startWithdraws(conn, db)
+	if err != nil {
+		log.Errorf("error starting withdraw consumer: %v", err)
+		attempt := 0
+		err = retry.Do(
+			func() error {
+				log.Infof("retrying to consume from withdraws, attempt %b", attempt)
+				err = tc.startWithdraws(conn, db)
+				if err != nil {
+					return err
+				}
+				return nil
+			},
+			retry.Attempts(10), retry.Delay(3*time.Second),
+		)
+	}
+
+	err = tc.startTransfers(conn, db)
+	if err != nil {
+		log.Errorf("error starting transfer consumer: %v", err)
+		attempt := 0
+		err = retry.Do(
+			func() error {
+				log.Infof("retrying to consume from transfers, attempt %b", attempt)
+				err = tc.startTransfers(conn, db)
+				if err != nil {
+					return err
+				}
+				return nil
+			},
+			retry.Attempts(10), retry.Delay(3*time.Second),
+		)
+	}
+
+	<-forever
+}
+
+func (tc TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error) {
+	err := <-closed
+	if err != nil {
+		log.Errorf("closed mq connection: %v", err)
+
+		var i int
+
+		for i = 0; i < cfg.MaxReconnect; i++ {
+			log.Info("attempting to reconnect to mq")
+
+			if conn, err := mq.NewConnection(cfg); err == nil {
+				log.Info("reconnected to mq")
+				tc.StartConsume(conn, db)
+			}
+
+			time.Sleep(1 * time.Second)
+		}
+
+		if i == cfg.MaxReconnect {
+			log.Error("reached max attempts, unable to reconnect to mq")
+			return
+		}
+	} else {
+		log.Info("mq connection closed normally, will not reconnect")
+		os.Exit(0)
+	}
+}
+
+func (tc TransactionConsumer) startDeposits(conn mq.Conn, db *sqlx.DB) error {
+	deposits, err := conn.Channel.Consume(tc.Deposit.Name, depositConsumer, false, false,
 		false, false, nil,
 	)
 	if err != nil {
@@ -58,6 +139,17 @@ func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
 		}()
 	}
 
+	return nil
+}
+
+func (tc TransactionConsumer) startWithdraws(conn mq.Conn, db *sqlx.DB) error {
+	withdraws, err := conn.Channel.Consume(tc.Withdraw.Name, withdrawConsumer, false, false,
+		false, false, nil,
+	)
+	if err != nil {
+		return err
+	}
+
 	for i := 0; i < tc.Concurrency; i++ {
 		go func() {
 			for w := range withdraws {
@@ -73,38 +165,62 @@ func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) error {
 		}()
 	}
 
-	forever := make(chan bool)
-	<-forever
+	return nil
+}
+
+func (tc TransactionConsumer) startTransfers(conn mq.Conn, db *sqlx.DB) error {
+	withdraws, err := conn.Channel.Consume(tc.Transfer.Name, transferConsumer, false, false,
+		false, false, nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < tc.Concurrency; i++ {
+		go func() {
+			for w := range withdraws {
+				ok, err2 := handleTransfer(w, db, conn)
+				if err2 != nil {
+					_ = w.Nack(false, false)
+				} else if !ok {
+					_ = w.Nack(false, true)
+				} else {
+					_ = w.Ack(false)
+				}
+			}
+		}()
+	}
 
 	return nil
 }
 
-func (tc TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error) {
-	err := <-closed
+func handleTransfer(d amqp.Delivery, db *sqlx.DB) (bool, error) {
+	var payload TransferMessage
+
+	r := bytes.NewReader(d.Body)
+	err := json.NewDecoder(r).Decode(&payload);
 	if err != nil {
-		log.Errorf("closed mq connection: %v", err)
-
-		var i int
-
-		for i = 0; i < cfg.MaxReconnect; i++ {
-			log.Info("attempting to reconnect to mq")
-
-			if conn, err := mq.NewConnection(cfg); err == nil {
-				log.Info("reconnected to mq")
-				_ = tc.StartConsume(conn, db)
-			}
-
-			time.Sleep(1 * time.Second)
-		}
-
-		if i == cfg.MaxReconnect {
-			log.Error("reached max attempts, unable to reconnect to mq")
-			return
-		}
-	} else {
-		log.Info("mq connection closed normally, will not reconnect")
-		os.Exit(0)
+		return false, err
 	}
+
+	err = validateAmount(payload.Amount)
+	if err != nil {
+		return false, err
+	}
+
+	err = account.Transfer(db, payload.FromID, payload.ToID, payload.Amount)
+	if err != nil {
+		if errors.Cause(err) == account.FromNotFound {
+			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.FromID))
+		}
+		if errors.Cause(err) == account.ToNotFound {
+			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.ToID))
+		}
+
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
@@ -165,12 +281,12 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 	return true, nil
 }
 
-func decodeMessage(d amqp.Delivery) (TxMessage, error) {
-	var payload TxMessage
+func decodeMessage(d amqp.Delivery) (BalanceMessage, error) {
+	var payload BalanceMessage
 
 	r := bytes.NewReader(d.Body)
 	if err := json.NewDecoder(r).Decode(&payload); err != nil {
-		return TxMessage{}, errors.New("invalid message payload, unable to parse")
+		return BalanceMessage{}, errors.New("invalid message payload, unable to parse")
 	}
 
 	return payload, nil
