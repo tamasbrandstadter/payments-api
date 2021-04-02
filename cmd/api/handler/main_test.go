@@ -39,10 +39,11 @@ func testMain(m *testing.M) int {
 		return 1
 	}
 
-	deposit, withdraw, err := conn.DeclareQueues(5)
+	deposit, withdraw, transfer, err := conn.DeclareQueues(5)
 	tc := balance.TransactionConsumer{
 		Deposit:     deposit,
 		Withdraw:    withdraw,
+		Transfer:    transfer,
 		Concurrency: 5,
 	}
 

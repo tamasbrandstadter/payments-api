@@ -534,7 +534,7 @@ func TestDeposit(t *testing.T) {
 	})
 
 	go func() {
-		_ = a.Tc.StartConsume(a.Conn, a.DB)
+		a.Tc.StartConsume(a.Conn, a.DB)
 	}()
 
 	time.Sleep(time.Second / 2)

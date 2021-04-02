@@ -179,7 +179,7 @@ func (tc TransactionConsumer) startTransfers(conn mq.Conn, db *sqlx.DB) error {
 	for i := 0; i < tc.Concurrency; i++ {
 		go func() {
 			for w := range withdraws {
-				ok, err2 := handleTransfer(w, db, conn)
+				ok, err2 := handleTransfer(w, db)
 				if err2 != nil {
 					_ = w.Nack(false, false)
 				} else if !ok {
@@ -210,11 +210,12 @@ func handleTransfer(d amqp.Delivery, db *sqlx.DB) (bool, error) {
 
 	err = account.Transfer(db, payload.FromID, payload.ToID, payload.Amount)
 	if err != nil {
-		if errors.Cause(err) == account.FromNotFound {
-			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.FromID))
+		if errors.Cause(err) == account.InvalidAccounts {
+			return false, err
 		}
-		if errors.Cause(err) == account.ToNotFound {
-			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.ToID))
+
+		if te, ok := err.(*account.InvalidTransferError); ok {
+			return false, te
 		}
 
 		return false, nil
