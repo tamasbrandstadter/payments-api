@@ -404,6 +404,130 @@ func TestWithdrawInsufficientFundsError(t *testing.T) {
 	}
 }
 
+func TestTransfer(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+
+	rows := sqlmock.NewRows([]string{"id", "balance"}).
+		AddRow(1, 230.5).AddRow(2, 15.6)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(query).WithArgs(1, 2).WillReturnRows(rows)
+
+	updateQuery := "UPDATE accounts as u SET balance = u2.balance, modified_at = u2.modified_at FROM " +
+		"\\(values \\(\\$1::integer, \\$2::decimal, \\$3::timestamp\\), \\(\\$4::integer, \\$5::decimal, \\$6::timestamp\\)\\) " +
+		"as u2\\(id, balance, modified_at\\) WHERE u2.id = u.id;"
+
+	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(1, 225.5, sqlmock.AnyArg(), 2, 20.6, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(2, 2))
+	mock.ExpectCommit()
+
+	err := Transfer(db, 1, 2, 5.0)
+	if err != nil {
+		t.Errorf("transfer test failed, expected nil error got: %v", err)
+	}
+}
+
+func TestTransferErrorAccountsNotFound(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance"})
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(query).WithArgs(1, 2).WillReturnRows(rows)
+	mock.ExpectRollback()
+
+	err := Transfer(db, 1, 2, 5.0)
+	assert.Error(t, err)
+	assert.True(t, errors.Cause(err) == InvalidAccounts)
+}
+
+func TestTransferErrorFromAccountNotFound(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	fromId := 1
+	toId := 2
+
+	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance"}).AddRow(toId, 24.5)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
+	mock.ExpectRollback()
+
+	err := Transfer(db, fromId, toId, 5.0)
+	assert.Error(t, err)
+	assert.Equal(t, "invalid transfer, account id 1 not found", err.Error())
+}
+
+func TestTransferErrorToAccountNotFound(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	fromId := 1
+	toId := 2
+
+	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance"}).AddRow(fromId, 24.5)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
+	mock.ExpectRollback()
+
+	err := Transfer(db, fromId, toId, 5.0)
+	assert.Error(t, err)
+	assert.Equal(t, "invalid transfer, account id 2 not found", err.Error())
+}
+
+func TestTransferErrorInsufficientFunds(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	fromId := 1
+	toId := 2
+
+	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance"}).AddRow(fromId, 24.5).AddRow(toId, 5.0)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
+	mock.ExpectRollback()
+
+	err := Transfer(db, fromId, toId, 12225.0)
+	assert.Error(t, err)
+	assert.Equal(t, "insufficient funds, balance: 24.50", err.Error())
+}
+
+func TestTransferExecError(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	fromId := 1
+	toId := 2
+
+	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance"}).AddRow(fromId, 24.5).AddRow(toId, 5.0)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
+
+	updateQuery := "UPDATE accounts as u SET balance = u2.balance, modified_at = u2.modified_at FROM " +
+		"\\(values \\(\\$1::integer, \\$2::decimal, \\$3::timestamp\\), \\(\\$4::integer, \\$5::decimal, \\$6::timestamp\\)\\) " +
+		"as u2\\(id, balance, modified_at\\) WHERE u2.id = u.id;"
+
+	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(1, 20.5, sqlmock.AnyArg(), 2, 9.0, sqlmock.AnyArg()).
+		WillReturnError(sql.ErrConnDone)
+	mock.ExpectRollback()
+
+	err := Transfer(db, 1, 2, 4.0)
+	assert.Error(t, err)
+}
+
 func NewMockDb() (*sqlx.DB, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/stretchr/testify/assert"
+	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
 	"github.com/tamasbrandstadter/payments-api/internal/testmq"
 )
@@ -42,17 +43,17 @@ func TestHandleDeposit(t *testing.T) {
 	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(16.5, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	auditQuery := "INSERT INTO transactions\\(account_id, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3\\) RETURNING id;"
+	auditQuery := "INSERT INTO transactions\\(from_id, to_id, transaction_type, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
 
 	row := sqlmock.NewRows([]string{"id"}).AddRow(534)
 
 	mock.ExpectBegin()
-	mock.ExpectPrepare(auditQuery).ExpectQuery().WithArgs(accId, true, sqlmock.AnyArg()).WillReturnRows(row)
+	mock.ExpectPrepare(auditQuery).ExpectQuery().WithArgs(accId, 0, "deposit", true, sqlmock.AnyArg()).WillReturnRows(row)
 	mock.ExpectCommit()
 
 	ok, err := handleDeposit(d, db, NewConn())
 	if !ok || err != nil {
-		t.Errorf("ok true and err nil was expected got: %v and %v", ok, err)
+		t.Errorf("test handle deposit failed, ok true and err nil were expected got: %v and %v", ok, err)
 	}
 }
 
@@ -165,17 +166,17 @@ func TestHandleWithdraw(t *testing.T) {
 	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(14.5, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	auditQuery := "INSERT INTO transactions\\(account_id, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3\\) RETURNING id;"
+	auditQuery := "INSERT INTO transactions\\(from_id, to_id, transaction_type, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
 
 	row := sqlmock.NewRows([]string{"id"}).AddRow(534)
 
 	mock.ExpectBegin()
-	mock.ExpectPrepare(auditQuery).ExpectQuery().WithArgs(accId, true, sqlmock.AnyArg()).WillReturnRows(row)
+	mock.ExpectPrepare(auditQuery).ExpectQuery().WithArgs(accId, 0, "withdraw", true, sqlmock.AnyArg()).WillReturnRows(row)
 	mock.ExpectCommit()
 
 	ok, err := handleWithdraw(d, db, NewConn())
 	if !ok || err != nil {
-		t.Errorf("ok true and err nil was expected got: %v and %v", ok, err)
+		t.Errorf("test handle withdraw failed, ok true and err nil were expected got: %v and %v", ok, err)
 	}
 }
 
@@ -258,6 +259,134 @@ func TestHandleWithdrawServerError(t *testing.T) {
 	mock.ExpectRollback()
 
 	ok, err := handleWithdraw(d, db, NewConn())
+	assert.False(t, ok)
+	assert.Nil(t, err)
+}
+
+func TestHandleTransfer(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	msg := []byte("{\"from\":1,\"to\":2,\"amount\":1}")
+
+	d := amqp.Delivery{
+		ContentType: "application/json",
+		Body:        msg,
+	}
+
+	selectQuery := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+
+	from := 1
+	to := 2
+
+	rows := sqlmock.NewRows([]string{"id", "balance"}).
+		AddRow(1, 15.5).AddRow(2, 5.6)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(selectQuery).WithArgs(from, to).WillReturnRows(rows)
+
+	updateQuery := "UPDATE accounts as u SET balance = u2.balance, modified_at = u2.modified_at FROM " +
+		"\\(values \\(\\$1::integer, \\$2::decimal, \\$3::timestamp\\), \\(\\$4::integer, \\$5::decimal, \\$6::timestamp\\)\\) " +
+		"as u2\\(id, balance, modified_at\\) WHERE u2.id = u.id;"
+
+	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(from, 14.5, sqlmock.AnyArg(), to, 6.6, sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(2, 2))
+	mock.ExpectCommit()
+
+	auditQuery := "INSERT INTO transactions\\(from_id, to_id, transaction_type, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
+
+	row := sqlmock.NewRows([]string{"id"}).AddRow(534)
+
+	mock.ExpectBegin()
+	mock.ExpectPrepare(auditQuery).ExpectQuery().WithArgs(from, to, "transfer", true, sqlmock.AnyArg()).WillReturnRows(row)
+	mock.ExpectCommit()
+
+	ok, err := handleTransfer(d, db, NewConn())
+	if !ok || err != nil {
+		t.Errorf("test handle deposit failed, ok true and err nil were expected got: %v and %v", ok, err)
+	}
+}
+
+func TestHandleTransferPayloadError(t *testing.T) {
+	db, _ := NewMockDb()
+	defer db.Close()
+
+	msg := []byte("invalid")
+
+	d := amqp.Delivery{
+		ContentType: "application/json",
+		Body:        msg,
+	}
+
+	ok, err := handleTransfer(d, db, NewConn())
+	assert.False(t, ok)
+	assert.Error(t, err)
+	assert.Equal(t, "invalid message payload, unable to parse", err.Error())
+}
+
+func TestHandleTransferAmountError(t *testing.T) {
+	db, _ := NewMockDb()
+	defer db.Close()
+
+	msg := []byte("{\"from\":1,\"to\":2,\"amount\":-1}")
+
+	d := amqp.Delivery{
+		ContentType: "application/json",
+		Body:        msg,
+	}
+
+	ok, err := handleTransfer(d, db, NewConn())
+	assert.False(t, ok)
+	assert.Error(t, err)
+	assert.Equal(t, "balance operation amount can't be negative", err.Error())
+}
+
+func TestHandleTransferAccountNotFoundError(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	msg := []byte("{\"from\":1,\"to\":2,\"amount\":1}")
+
+	d := amqp.Delivery{
+		ContentType: "application/json",
+		Body:        msg,
+	}
+
+	selectQuery := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+
+	from := 1
+	to := 2
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(selectQuery).WithArgs(from, to).WillReturnError(account.InvalidAccounts)
+	mock.ExpectRollback()
+
+	ok, err := handleTransfer(d, db, NewConn())
+	assert.False(t, ok)
+	assert.Error(t, err)
+	assert.Equal(t, "invalid transfer, account ids are not found", err.Error())
+}
+
+func TestHandleTransferServerError(t *testing.T) {
+	db, mock := NewMockDb()
+	defer db.Close()
+
+	msg := []byte("{\"from\":1,\"to\":2,\"amount\":1}")
+
+	d := amqp.Delivery{
+		ContentType: "application/json",
+		Body:        msg,
+	}
+
+	selectQuery := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+
+	from := 1
+	to := 2
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(selectQuery).WithArgs(from, to).WillReturnError(errors.New("test"))
+	mock.ExpectRollback()
+
+	ok, err := handleTransfer(d, db, NewConn())
 	assert.False(t, ok)
 	assert.Nil(t, err)
 }

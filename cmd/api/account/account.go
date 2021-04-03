@@ -163,7 +163,7 @@ func Freeze(db *sqlx.DB, id int) (Account, error) {
 
 	if _, err = stmt.Exec(modifiedAt, id); err != nil {
 		_ = tx.Rollback()
-		log.Warnf("freeze account for id %d was rolled back %v", id, err)
+		log.Warnf("freeze account for id %d was rolled back, error: %v", id, err)
 		return Account{}, err
 	}
 
@@ -308,9 +308,9 @@ func Transfer(db *sqlx.DB, fromId int, toId int, amount float64) error {
 		_ = tx.Rollback()
 		var missingId int
 		if accounts[0].ID == fromId {
-			missingId = fromId
-		} else {
 			missingId = toId
+		} else {
+			missingId = fromId
 		}
 		return &InvalidTransferError{MissingAccountID: missingId}
 	}

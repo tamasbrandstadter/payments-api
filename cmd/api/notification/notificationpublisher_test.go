@@ -17,13 +17,12 @@ func TestPublishSuccessfulTxNotification(t *testing.T) {
 
 	utc := time.Now().UTC()
 	txId := 55345
-	accId := 34
 
-	PublishSuccessfulTxNotification(conn, txId, accId, utc)
+	PublishSuccessfulTxNotification(conn, txId, utc)
 
 	messages, err := conn.Channel.Consume("test-queue", "test-consumer", false, false, false, false, nil)
 	if err != nil {
-		t.Errorf("err nil expected got: %v", err)
+		t.Errorf("test publish successfull tx notification failed, err nil expected, got: %v", err)
 	}
 
 	m := <-messages
@@ -32,11 +31,10 @@ func TestPublishSuccessfulTxNotification(t *testing.T) {
 
 	r := bytes.NewReader(m.Body)
 	if err = json.NewDecoder(r).Decode(&n); err != nil {
-		t.Errorf("err nil expected got: %v", err)
+		t.Errorf("test publish successfull tx notification failed, err nil expected, got: %v", err)
 	}
 
 	assert.Equal(t, txId, n.TransactionId)
-	assert.Equal(t, accId, n.AccountID)
 	assert.Equal(t, utc, n.CreatedAt)
 	assert.True(t, n.Ack)
 }

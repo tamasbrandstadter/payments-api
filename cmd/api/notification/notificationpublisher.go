@@ -20,15 +20,13 @@ const (
 
 type notification struct {
 	TransactionId int       `json:"txId"`
-	AccountID     int       `json:"accId"`
 	CreatedAt     time.Time `json:"createdAt"`
 	Ack           bool      `json:"ack"`
 }
 
-func PublishSuccessfulTxNotification(conn mq.Conn, txId int, accId int, createdAt time.Time) {
+func PublishSuccessfulTxNotification(conn mq.Conn, txId int, createdAt time.Time) {
 	n := &notification{
 		TransactionId: txId,
-		AccountID:     accId,
 		CreatedAt:     createdAt,
 		Ack:           true,
 	}

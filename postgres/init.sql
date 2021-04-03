@@ -1,3 +1,5 @@
+CREATE TYPE txtype AS ENUM ('deposit', 'withdraw', 'transfer');
+
 CREATE TABLE customers
 (
     id          SERIAL PRIMARY KEY,
@@ -24,11 +26,13 @@ CREATE TABLE accounts
 
 CREATE TABLE transactions
 (
-    id         SERIAL PRIMARY KEY,
-    account_id SERIAL,
+    id               SERIAL PRIMARY KEY,
+    from_id          INTEGER,
     CONSTRAINT fk_account
-        FOREIGN KEY (account_id)
+        FOREIGN KEY (from_id)
             REFERENCES accounts (id),
-    ack        BOOLEAN,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (now() at time zone 'utc')
+    to_id            INTEGER,
+    transaction_type txtype NOT NULL,
+    ack              BOOLEAN                     DEFAULT TRUE,
+    created_at       TIMESTAMP WITHOUT TIME ZONE DEFAULT (now() at time zone 'utc')
 )

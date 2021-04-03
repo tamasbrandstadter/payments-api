@@ -179,7 +179,7 @@ func (tc TransactionConsumer) startTransfers(conn mq.Conn, db *sqlx.DB) error {
 	for i := 0; i < tc.Concurrency; i++ {
 		go func() {
 			for w := range withdraws {
-				ok, err2 := handleTransfer(w, db)
+				ok, err2 := handleTransfer(w, db, conn)
 				if err2 != nil {
 					_ = w.Nack(false, false)
 				} else if !ok {
@@ -194,13 +194,13 @@ func (tc TransactionConsumer) startTransfers(conn mq.Conn, db *sqlx.DB) error {
 	return nil
 }
 
-func handleTransfer(d amqp.Delivery, db *sqlx.DB) (bool, error) {
+func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 	var payload TransferMessage
 
 	r := bytes.NewReader(d.Body)
-	err := json.NewDecoder(r).Decode(&payload);
+	err := json.NewDecoder(r).Decode(&payload)
 	if err != nil {
-		return false, err
+		return false, errors.New("invalid message payload, unable to parse")
 	}
 
 	err = validateAmount(payload.Amount)
@@ -219,6 +219,10 @@ func handleTransfer(d amqp.Delivery, db *sqlx.DB) (bool, error) {
 		}
 
 		return false, nil
+	}
+
+	if err = audit.SaveAuditRecord(db, payload.FromID, payload.ToID, audit.Transfer, conn); err != nil {
+		log.Errorf("error saving audit record: %v", err)
 	}
 
 	return true, nil
@@ -243,7 +247,7 @@ func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 		return false, nil
 	}
 
-	if err = audit.SaveAuditRecord(db, payload.AccountID, conn); err != nil {
+	if err = audit.SaveAuditRecord(db, payload.AccountID, 0, audit.Deposit, conn); err != nil {
 		log.Errorf("error saving audit record: %v", err)
 	}
 
@@ -275,7 +279,7 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 		return false, nil
 	}
 
-	if err = audit.SaveAuditRecord(db, payload.AccountID, conn); err != nil {
+	if err = audit.SaveAuditRecord(db, payload.AccountID, 0, audit.Withdraw, conn); err != nil {
 		log.Errorf("error saving audit record: %v", err)
 	}
 

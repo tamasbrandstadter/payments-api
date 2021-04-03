@@ -8,5 +8,7 @@ const (
 	deleteById     = "DELETE FROM accounts WHERE id=$1;"
 	freezeById     = "UPDATE accounts SET frozen = TRUE, modified_at=$1 WHERE id=$2;"
 	updateBalance  = "UPDATE accounts SET balance=$1, modified_at=$2 WHERE id=$3;"
-	updateBalances = "UPDATE accounts as u SET balance = u2.balance, modified_at = u2.modified_at FROM (values ($1::integer, $2::decimal, $3::timestamp), ($4::integer, $5::decimal, $6::timestamp)) as u2(id, balance, modified_at) WHERE u2.id = u.id;"
+	updateBalances = "UPDATE accounts as u SET balance = u2.balance, modified_at = u2.modified_at FROM" +
+		" (values ($1::integer, $2::decimal, $3::timestamp), ($4::integer, $5::decimal, $6::timestamp)) " +
+		"as u2(id, balance, modified_at) WHERE u2.id = u.id;"
 )

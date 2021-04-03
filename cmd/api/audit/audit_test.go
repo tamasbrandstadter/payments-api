@@ -16,17 +16,17 @@ func TestSaveAuditRecord(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	query := "INSERT INTO transactions\\(account_id, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3\\) RETURNING id;"
+	query := "INSERT INTO transactions\\(from_id, to_id, transaction_type, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
 
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(11)
 
 	mock.ExpectBegin()
-	mock.ExpectPrepare(query).ExpectQuery().WithArgs(1, true, sqlmock.AnyArg()).WillReturnRows(rows)
+	mock.ExpectPrepare(query).ExpectQuery().WithArgs(1, 2, "transfer", true, sqlmock.AnyArg()).WillReturnRows(rows)
 	mock.ExpectCommit()
 
-	err := SaveAuditRecord(db, 1, NewConn())
+	err := SaveAuditRecord(db, 1, 2, 2, NewConn())
 	if err != nil {
-		t.Errorf("expected err nil got: %v", err)
+		t.Errorf("test save audit record failed, expected err nil, got: %v", err)
 	}
 }
 
@@ -34,13 +34,13 @@ func TestSaveAuditRecordError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	query := "INSERT INTO transactions\\(account_id, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3\\) RETURNING id;"
+	query := "INSERT INTO transactions\\(from_id, to_id, transaction_type, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
 
 	mock.ExpectBegin()
-	mock.ExpectPrepare(query).ExpectQuery().WithArgs(1, true, sqlmock.AnyArg()).WillReturnError(sql.ErrConnDone)
+	mock.ExpectPrepare(query).ExpectQuery().WithArgs(1, 2, "transfer", true, sqlmock.AnyArg()).WillReturnError(sql.ErrConnDone)
 	mock.ExpectRollback()
 
-	err := SaveAuditRecord(db, 1, NewConn())
+	err := SaveAuditRecord(db, 1, 2, 2, NewConn())
 
 	assert.Error(t, err)
 }
