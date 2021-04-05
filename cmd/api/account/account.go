@@ -40,48 +40,48 @@ type Account struct {
 	Frozen           bool      `json:"frozen" db:"frozen"`
 }
 
-func SelectAll(db *sqlx.DB) ([]Account, error) {
+func SelectAll(db *sqlx.DB) (*[]Account, error) {
 	accounts := make([]Account, 0)
 
 	if err := db.Select(&accounts, selectAll); err != nil {
 		return nil, err
 	}
 
-	return accounts, nil
+	return &accounts, nil
 }
 
-func SelectById(db *sqlx.DB, id int) (Account, error) {
+func SelectById(db *sqlx.DB, id int) (*Account, error) {
 	var acc Account
 
-	pStmt, err := db.Preparex(selectById)
+	stmt, err := db.Preparex(selectById)
 	if err != nil {
-		return Account{}, err
+		return nil, err
 	}
 
 	defer func() {
-		if err := pStmt.Close(); err != nil {
+		if err := stmt.Close(); err != nil {
 			log.WithError(err).Info("select account")
 		}
 	}()
 
-	row := pStmt.QueryRowx(id)
+	row := stmt.QueryRowx(id)
 
 	if err := row.StructScan(&acc); err != nil {
-		return Account{}, err
+		return nil, err
 	}
 
-	return acc, nil
+	return &acc, nil
 }
 
-func Create(db *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error) {
+func Create(db *sqlx.DB, customerId int, ar AccCreationRequest) (*Account, error) {
 	tx, err := db.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		return Account{}, err
+		return nil, err
 	}
 
 	m := money.New(ar.InitialBalance, ar.Currency)
 
-	acc := Account{
+	acc := &Account{
 		CustomerID:       customerId,
 		BalanceInDecimal: m.Amount(),
 		Currency:         m.Currency().Code,
@@ -93,7 +93,7 @@ func Create(db *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error)
 	stmt, err := tx.Prepare(insert)
 	if err != nil {
 		_ = tx.Rollback()
-		return Account{}, err
+		return nil, err
 	}
 
 	row := stmt.QueryRow(acc.CustomerID, acc.BalanceInDecimal, acc.Currency, acc.CreatedAt, acc.ModifiedAt)
@@ -101,11 +101,11 @@ func Create(db *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error)
 	if err = row.Scan(&acc.ID); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("account creation for customer id %d was rolled back, error: %v", customerId, err)
-		return Account{}, err
+		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
 		log.Errorf("failed to commit account creation for customer id %d, error: %v", customerId, err)
-		return Account{}, err
+		return nil, err
 	}
 
 	log.Infof("successfully created account with id %d for customer id %d", acc.ID, acc.CustomerID)
@@ -139,15 +139,15 @@ func Delete(db *sqlx.DB, id int) error {
 	return nil
 }
 
-func Freeze(db *sqlx.DB, id int) (Account, error) {
+func Freeze(db *sqlx.DB, id int) (*Account, error) {
 	acc, err := SelectById(db, id)
 	if errors.Cause(err) == sql.ErrNoRows {
-		return Account{}, sql.ErrNoRows
+		return nil, sql.ErrNoRows
 	}
 
 	tx, err := db.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		return Account{}, err
+		return nil, err
 	}
 
 	modifiedAt := time.Now().UTC()
@@ -155,18 +155,18 @@ func Freeze(db *sqlx.DB, id int) (Account, error) {
 	stmt, err := tx.Prepare(freezeById)
 	if err != nil {
 		_ = tx.Rollback()
-		return Account{}, err
+		return nil, err
 	}
 
 	if _, err = stmt.Exec(modifiedAt, id); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("freeze account for id %d was rolled back, error: %v", id, err)
-		return Account{}, err
+		return nil, err
 	}
 
 	if err = tx.Commit(); err != nil {
 		log.Errorf("failed to commit account freeze for account id %d, error: %v", id, err)
-		return Account{}, err
+		return nil, err
 	}
 
 	acc.ModifiedAt = modifiedAt

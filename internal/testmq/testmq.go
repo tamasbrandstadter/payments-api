@@ -14,7 +14,7 @@ const (
 	topic    = "topic"
 )
 
-func Open() (mq.Conn, error) {
+func Open() (*mq.Conn, error) {
 	cfg := mq.Config{
 		User:         user,
 		Pass:         password,
@@ -26,22 +26,22 @@ func Open() (mq.Conn, error) {
 
 	conn, err := mq.NewConnection(cfg)
 	if err != nil {
-		return mq.Conn{}, err
+		return nil, err
 	}
 
 	err = conn.Channel.ExchangeDeclare(exchange, topic, true, false, false, false, nil)
 	if err != nil {
-		return mq.Conn{}, err
+		return nil, err
 	}
 
 	q, err := conn.Channel.QueueDeclare(queue, false, false, false, false, nil)
 	if err != nil {
-		return mq.Conn{}, err
+		return nil, err
 	}
 
 	err = conn.Channel.QueueBind(q.Name, "notif", exchange, false, nil)
 	if err != nil {
-		return mq.Conn{}, err
+		return nil, err
 	}
 
 	return conn, err

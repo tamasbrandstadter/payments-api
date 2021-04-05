@@ -15,50 +15,50 @@ const (
 	transferRouteKey     = "trnsfr"
 )
 
-func (conn Conn) DeclareQueues(concurrency int) (amqp.Queue, amqp.Queue, amqp.Queue, error) {
+func (conn *Conn) DeclareQueues(concurrency int) (*amqp.Queue, *amqp.Queue, *amqp.Queue, error) {
 	err := conn.Channel.ExchangeDeclare(paymentsExchangeName, kind, true, false, false, false, nil)
 	if err != nil {
-		return amqp.Queue{}, amqp.Queue{}, amqp.Queue{}, err
+		return nil, nil, nil, err
 	}
 
 	// deposit
 	deposit, err := conn.Channel.QueueDeclare(depositQueueName, true, false, false, false, nil)
 	if err != nil {
-		return amqp.Queue{}, amqp.Queue{}, amqp.Queue{}, err
+		return nil, nil, nil, err
 	}
 
 	err = conn.Channel.QueueBind(depositQueueName, depositRouteKey, paymentsExchangeName, false, nil)
 	if err != nil {
-		return amqp.Queue{}, amqp.Queue{}, amqp.Queue{}, err
+		return nil, nil, nil, err
 	}
 
 	// withdraw
 	withdraw, err := conn.Channel.QueueDeclare(withdrawQueueName, true, false, false, false, nil)
 	if err != nil {
-		return amqp.Queue{}, amqp.Queue{}, amqp.Queue{}, err
+		return nil, nil, nil, err
 	}
 
 	err = conn.Channel.QueueBind(withdrawQueueName, withdrawRouteKey, paymentsExchangeName, false, nil)
 	if err != nil {
-		return amqp.Queue{}, amqp.Queue{}, amqp.Queue{}, err
+		return nil, nil, nil, err
 	}
 
 	// transfer
 	transfer, err := conn.Channel.QueueDeclare(transferQueueName, true, false, false, false, nil)
 	if err != nil {
-		return amqp.Queue{}, amqp.Queue{}, amqp.Queue{}, err
+		return nil, nil, nil, err
 	}
 
 	err = conn.Channel.QueueBind(transferQueueName, transferRouteKey, paymentsExchangeName, false, nil)
 	if err != nil {
-		return amqp.Queue{}, amqp.Queue{}, amqp.Queue{}, err
+		return nil, nil, nil, err
 	}
 
 	prefetchCount := concurrency * 4
 	err = conn.Channel.Qos(prefetchCount, 0, false)
 	if err != nil {
-		return amqp.Queue{}, amqp.Queue{}, amqp.Queue{}, err
+		return nil, nil, nil, err
 	}
 
-	return deposit, withdraw, transfer, nil
+	return &deposit, &withdraw, &transfer, nil
 }

@@ -75,25 +75,25 @@ func DeleteTestAccount(db *sqlx.DB, id int) error {
 	return nil
 }
 
-func SelectById(db *sqlx.DB, id int) (account.Account, error) {
+func SelectById(db *sqlx.DB, id int) (*account.Account, error) {
 	var acc account.Account
 
-	pStmt, err := db.Preparex("SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=$1;")
+	stmt, err := db.Preparex("SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=$1;")
 	if err != nil {
-		return account.Account{}, err
+		return nil, err
 	}
 
 	defer func() {
-		if err := pStmt.Close(); err != nil {
+		if err := stmt.Close(); err != nil {
 			log.WithError(err).Info("select account")
 		}
 	}()
 
-	row := pStmt.QueryRowx(id)
+	row := stmt.QueryRowx(id)
 
 	if err := row.StructScan(&acc); err != nil {
-		return account.Account{}, err
+		return nil, err
 	}
 
-	return acc, nil
+	return &acc, nil
 }

@@ -45,8 +45,8 @@ func (a *Application) FindAllAccounts(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	if len(accounts) == 0 {
-		accounts = make([]account.Account, 0)
+	if len(*accounts) == 0 {
+		*accounts = make([]account.Account, 0)
 	}
 
 	web.Respond(w, http.StatusOK, accounts)

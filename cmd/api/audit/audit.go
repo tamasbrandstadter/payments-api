@@ -19,8 +19,8 @@ const (
 	Transfer
 )
 
-func (tt TransactionType) String() string {
-	return [...]string{"deposit", "withdraw", "transfer"}[tt]
+func (tt *TransactionType) String() string {
+	return [...]string{"deposit", "withdraw", "transfer"}[*tt]
 }
 
 type TxRecord struct {
@@ -32,7 +32,7 @@ type TxRecord struct {
 	createdAt     time.Time `db:"created_at"`
 }
 
-func SaveAuditRecord(db *sqlx.DB, fromId, toId int, tt TransactionType, conn mq.Conn) error {
+func SaveAuditRecord(db *sqlx.DB, fromId, toId int, tt TransactionType, conn *mq.Conn) error {
 	tx, err := db.BeginTxx(context.Background(), &sql.TxOptions{Isolation: sql.LevelDefault})
 	if err != nil {
 		return err

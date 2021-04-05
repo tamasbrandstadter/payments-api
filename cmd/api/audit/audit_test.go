@@ -55,7 +55,7 @@ func NewMockDb() (*sqlx.DB, sqlmock.Sqlmock) {
 	return sqlxDB, mock
 }
 
-func NewConn() mq.Conn {
+func NewConn() *mq.Conn {
 	conn, err := testmq.Open()
 	if err != nil {
 		log.Fatalf("an error '%s' was not expected when opening a test mq connection", err)

@@ -17,8 +17,8 @@ type Customer struct {
 	ModifiedAt time.Time `json:"modifiedAt" db:"modified_at"`
 }
 
-func Create(db *sqlx.DB, ar account.AccCreationRequest) (Customer, error) {
-	c := Customer{
+func Create(db *sqlx.DB, ar account.AccCreationRequest) (*Customer, error) {
+	c := &Customer{
 		FirstName:  ar.FirstName,
 		LastName:   ar.LastName,
 		Email:      ar.Email,
@@ -28,7 +28,7 @@ func Create(db *sqlx.DB, ar account.AccCreationRequest) (Customer, error) {
 
 	stmt, err := db.Prepare(insert)
 	if err != nil {
-		return Customer{}, err
+		return nil, err
 	}
 
 	defer func() {
@@ -40,7 +40,7 @@ func Create(db *sqlx.DB, ar account.AccCreationRequest) (Customer, error) {
 	row := stmt.QueryRow(c.FirstName, c.LastName, c.Email, c.CreatedAt, c.ModifiedAt)
 
 	if err = row.Scan(&c.ID); err != nil {
-		return Customer{}, err
+		return nil, err
 	}
 
 	log.Infof("successfully created customer with email %s and id %d", c.Email, c.ID)

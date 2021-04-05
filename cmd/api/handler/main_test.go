@@ -15,8 +15,8 @@ import (
 type TestApp struct {
 	Handler *Application
 	DB      *sqlx.DB
-	Conn    mq.Conn
-	Tc      balance.TransactionConsumer
+	Conn    *mq.Conn
+	Tc      *balance.TransactionConsumer
 }
 
 var a *TestApp
@@ -40,7 +40,7 @@ func testMain(m *testing.M) int {
 	}
 
 	deposit, withdraw, transfer, err := conn.DeclareQueues(5)
-	tc := balance.TransactionConsumer{
+	tc := &balance.TransactionConsumer{
 		Deposit:     deposit,
 		Withdraw:    withdraw,
 		Transfer:    transfer,

@@ -24,7 +24,7 @@ type notification struct {
 	Ack           bool      `json:"ack"`
 }
 
-func PublishSuccessfulTxNotification(conn mq.Conn, txId int, createdAt time.Time) {
+func PublishSuccessfulTxNotification(conn *mq.Conn, txId int, createdAt time.Time) {
 	n := &notification{
 		TransactionId: txId,
 		CreatedAt:     createdAt,

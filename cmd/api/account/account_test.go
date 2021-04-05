@@ -29,9 +29,9 @@ func TestSelectAll(t *testing.T) {
 	accounts, err := SelectAll(db)
 
 	assert.NoError(t, err)
-	assert.Len(t, accounts, 1)
+	assert.Len(t, *accounts, 1)
 
-	actualAcc := accounts[0]
+	actualAcc := (*accounts)[0]
 	assert.Equal(t, 11, actualAcc.ID)
 	assert.Equal(t, 22, actualAcc.CustomerID)
 	assert.Equal(t, int64(99900), actualAcc.BalanceInDecimal)

@@ -25,13 +25,13 @@ const (
 )
 
 type TransactionConsumer struct {
-	Deposit     amqp.Queue
-	Withdraw    amqp.Queue
-	Transfer    amqp.Queue
+	Deposit     *amqp.Queue
+	Withdraw    *amqp.Queue
+	Transfer    *amqp.Queue
 	Concurrency int
 }
 
-func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) {
+func (tc *TransactionConsumer) StartConsume(conn *mq.Conn, db *sqlx.DB) {
 	forever := make(chan bool)
 
 	err := tc.startDeposits(conn, db)
@@ -88,7 +88,7 @@ func (tc TransactionConsumer) StartConsume(conn mq.Conn, db *sqlx.DB) {
 	<-forever
 }
 
-func (tc TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error) {
+func (tc *TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error) {
 	err := <-closed
 	if err != nil {
 		log.Errorf("closed mq connection: %v", err)
@@ -116,7 +116,7 @@ func (tc TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.D
 	}
 }
 
-func (tc TransactionConsumer) startDeposits(conn mq.Conn, db *sqlx.DB) error {
+func (tc *TransactionConsumer) startDeposits(conn *mq.Conn, db *sqlx.DB) error {
 	deposits, err := conn.Channel.Consume(tc.Deposit.Name, depositConsumer, false, false,
 		false, false, nil,
 	)
@@ -142,7 +142,7 @@ func (tc TransactionConsumer) startDeposits(conn mq.Conn, db *sqlx.DB) error {
 	return nil
 }
 
-func (tc TransactionConsumer) startWithdraws(conn mq.Conn, db *sqlx.DB) error {
+func (tc *TransactionConsumer) startWithdraws(conn *mq.Conn, db *sqlx.DB) error {
 	withdraws, err := conn.Channel.Consume(tc.Withdraw.Name, withdrawConsumer, false, false,
 		false, false, nil,
 	)
@@ -168,7 +168,7 @@ func (tc TransactionConsumer) startWithdraws(conn mq.Conn, db *sqlx.DB) error {
 	return nil
 }
 
-func (tc TransactionConsumer) startTransfers(conn mq.Conn, db *sqlx.DB) error {
+func (tc *TransactionConsumer) startTransfers(conn *mq.Conn, db *sqlx.DB) error {
 	withdraws, err := conn.Channel.Consume(tc.Transfer.Name, transferConsumer, false, false,
 		false, false, nil,
 	)
@@ -194,7 +194,7 @@ func (tc TransactionConsumer) startTransfers(conn mq.Conn, db *sqlx.DB) error {
 	return nil
 }
 
-func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
+func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 	var payload TransferMessage
 
 	r := bytes.NewReader(d.Body)
@@ -232,7 +232,7 @@ func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 	return true, nil
 }
 
-func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
+func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 	payload, err := decodeMessage(d)
 	if err != nil {
 		return false, err
@@ -258,7 +258,7 @@ func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 	return true, nil
 }
 
-func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
+func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 	payload, err := decodeMessage(d)
 	if err != nil {
 		return false, err
@@ -290,15 +290,15 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 	return true, nil
 }
 
-func decodeMessage(d amqp.Delivery) (BalanceMessage, error) {
+func decodeMessage(d amqp.Delivery) (*BalanceMessage, error) {
 	var payload BalanceMessage
 
 	r := bytes.NewReader(d.Body)
 	if err := json.NewDecoder(r).Decode(&payload); err != nil {
-		return BalanceMessage{}, errors.New("invalid message payload, unable to parse")
+		return nil, errors.New("invalid message payload, unable to parse")
 	}
 
-	return payload, nil
+	return &payload, nil
 }
 
 func validateAmount(amount int64) error {
