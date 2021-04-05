@@ -43,13 +43,13 @@ func TestGetAccountById(t *testing.T) {
 	}
 
 	var expectedAcc = &account.Account{
-		ID:         1,
-		CustomerID: 1,
-		Balance:    999,
-		Currency:   "EUR",
-		CreatedAt:  testdb.TestTime,
-		ModifiedAt: testdb.TestTime,
-		Frozen:     false,
+		ID:               1,
+		CustomerID:       1,
+		BalanceInDecimal: 999,
+		Currency:         "EUR",
+		CreatedAt:        testdb.TestTime,
+		ModifiedAt:       testdb.TestTime,
+		Frozen:           false,
 	}
 
 	var actualAcc account.Account
@@ -131,7 +131,7 @@ func TestCreateAccountForCustomer(t *testing.T) {
 		LastName:       "last",
 		Email:          "first@last.com",
 		InitialBalance: 15,
-		Currency:       account.Currency("GBP"),
+		Currency:       "GBP",
 	}
 
 	var body bytes.Buffer
@@ -157,16 +157,16 @@ func TestCreateAccountForCustomer(t *testing.T) {
 	}
 
 	expectedAcc := account.Account{
-		ID:         2,
-		CustomerID: 2,
-		Balance:    15.0,
-		Currency:   "GBP",
-		Frozen:     false,
+		ID:               2,
+		CustomerID:       2,
+		BalanceInDecimal: 15.0,
+		Currency:         "GBP",
+		Frozen:           false,
 	}
 
 	assert.Equal(t, expectedAcc.ID, actualAcc.ID)
 	assert.Equal(t, expectedAcc.CustomerID, actualAcc.CustomerID)
-	assert.Equal(t, expectedAcc.Balance, actualAcc.Balance)
+	assert.Equal(t, expectedAcc.BalanceInDecimal, actualAcc.BalanceInDecimal)
 	assert.Equal(t, expectedAcc.Currency, actualAcc.Currency)
 	assert.False(t, actualAcc.Frozen)
 	assert.NotNil(t, actualAcc.CreatedAt)
@@ -205,7 +205,7 @@ func TestCreateAccountForCustomerErrorInName(t *testing.T) {
 	payload := account.AccCreationRequest{
 		Email:          "first@last.com",
 		InitialBalance: 15,
-		Currency:       account.Currency("GBP"),
+		Currency:       "GBP",
 	}
 
 	var body bytes.Buffer
@@ -233,47 +233,13 @@ func TestCreateAccountForCustomerErrorInName(t *testing.T) {
 	assert.Equal(t, "firstname and lastname are required fields", response["error"])
 }
 
-func TestCreateAccountForCustomerErrorUnsupportedCurrency(t *testing.T) {
-	payload := account.AccCreationRequest{
-		FirstName:      "first",
-		LastName:       "last",
-		Email:          "first@last.com",
-		InitialBalance: 15,
-		Currency:       account.Currency("HUF"),
-	}
-
-	var body bytes.Buffer
-	if err := json.NewEncoder(&body).Encode(payload); err != nil {
-		t.Errorf("error encoding request body: %v", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, "/accounts", &body)
-	if err != nil {
-		t.Errorf("error creating request: %v", err)
-	}
-
-	w := httptest.NewRecorder()
-	a.Handler.ServeHTTP(w, req)
-
-	if e, a := http.StatusBadRequest, w.Code; e != a {
-		t.Errorf("expected status code: %v, got status code: %v", e, a)
-	}
-
-	var response map[string]string
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-		t.Errorf("error decoding response body: %v", err)
-	}
-
-	assert.Equal(t, "HUF currency not supported", response["error"])
-}
-
 func TestCreateAccountForCustomerDuplicateEmail(t *testing.T) {
 	payload := account.AccCreationRequest{
 		FirstName:      "apple",
 		LastName:       "pie",
 		Email:          "first@last.com",
 		InitialBalance: 15,
-		Currency:       account.Currency("GBP"),
+		Currency:       "GBP",
 	}
 
 	var body bytes.Buffer
@@ -307,7 +273,7 @@ func TestCreateAccountForCustomerWithNegativeInitialBalance(t *testing.T) {
 		LastName:       "pie",
 		Email:          "second@second.com",
 		InitialBalance: -1,
-		Currency:       account.Currency("GBP"),
+		Currency:       "GBP",
 	}
 
 	var body bytes.Buffer
@@ -377,16 +343,16 @@ func TestFreezeAccount(t *testing.T) {
 	}
 
 	expectedAcc := account.Account{
-		ID:         2,
-		CustomerID: 2,
-		Balance:    15.0,
-		Currency:   "GBP",
-		Frozen:     true,
+		ID:               2,
+		CustomerID:       2,
+		BalanceInDecimal: 15.0,
+		Currency:         "GBP",
+		Frozen:           true,
 	}
 
 	assert.Equal(t, expectedAcc.ID, actualAcc.ID)
 	assert.Equal(t, expectedAcc.CustomerID, actualAcc.CustomerID)
-	assert.Equal(t, expectedAcc.Balance, actualAcc.Balance)
+	assert.Equal(t, expectedAcc.BalanceInDecimal, actualAcc.BalanceInDecimal)
 	assert.Equal(t, expectedAcc.Currency, actualAcc.Currency)
 	assert.True(t, actualAcc.Frozen)
 	assert.NotNil(t, actualAcc.CreatedAt)
@@ -543,7 +509,7 @@ func TestDeposit(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected err nil, got %v", err)
 	}
-	assert.Equal(t, 1000.0, acc.Balance)
+	assert.Equal(t, int64(1000), acc.BalanceInDecimal)
 }
 
 func TestWithdraw(t *testing.T) {
@@ -560,5 +526,5 @@ func TestWithdraw(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected err nil, got %v", err)
 	}
-	assert.Equal(t, 998.0, acc.Balance)
+	assert.Equal(t, int64(998), acc.BalanceInDecimal)
 }

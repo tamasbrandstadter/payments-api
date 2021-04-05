@@ -66,10 +66,6 @@ func (a *Application) CreateAccountForCustomer(w http.ResponseWriter, r *http.Re
 		web.RespondError(w, http.StatusBadRequest, "firstname and lastname are required fields")
 		return
 	}
-	if !payload.Currency.Supported() {
-		web.RespondError(w, http.StatusBadRequest, fmt.Sprintf("%s currency not supported", payload.Currency))
-		return
-	}
 	if payload.InitialBalance < 0 {
 		web.RespondError(w, http.StatusBadRequest, "initial deposit can't be negative")
 		return

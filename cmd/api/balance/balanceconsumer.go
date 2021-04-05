@@ -218,6 +218,10 @@ func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 			return false, te
 		}
 
+		if fe, ok := err.(*account.FundsError); ok {
+			return false, fe
+		}
+
 		return false, nil
 	}
 
@@ -239,7 +243,7 @@ func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 		return false, err
 	}
 
-	_, err = account.Deposit(db, payload.AccountID, payload.Amount)
+	err = account.Deposit(db, payload.AccountID, payload.Amount)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.AccountID))
@@ -265,7 +269,7 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn mq.Conn) (bool, error) {
 		return false, err
 	}
 
-	_, err = account.Withdraw(db, payload.AccountID, payload.Amount)
+	err = account.Withdraw(db, payload.AccountID, payload.Amount)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.AccountID))
@@ -297,7 +301,7 @@ func decodeMessage(d amqp.Delivery) (BalanceMessage, error) {
 	return payload, nil
 }
 
-func validateAmount(amount float64) error {
+func validateAmount(amount int64) error {
 	if amount < 0 {
 		return errors.New("balance operation amount can't be negative")
 	}

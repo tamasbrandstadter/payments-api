@@ -39,7 +39,7 @@ func SaveCustomerWithAccount(db *sqlx.DB, r account.AccCreationRequest) error {
 		return err
 	}
 
-	stmt, err = db.Prepare("INSERT INTO accounts(customer_id, balance, currency, created_at, modified_at) VALUES($1,$2,$3,$4,$5) RETURNING id;")
+	stmt, err = db.Prepare("INSERT INTO accounts(customer_id, balance_in_decimal, currency, created_at, modified_at) VALUES($1,$2,$3,$4,$5) RETURNING id;")
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func DeleteTestAccount(db *sqlx.DB, id int) error {
 func SelectById(db *sqlx.DB, id int) (account.Account, error) {
 	var acc account.Account
 
-	pStmt, err := db.Preparex("SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=$1;")
+	pStmt, err := db.Preparex("SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=$1;")
 	if err != nil {
 		return account.Account{}, err
 	}

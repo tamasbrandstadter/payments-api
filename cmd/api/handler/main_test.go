@@ -62,12 +62,12 @@ func testMain(m *testing.M) int {
 }
 
 func deleteRecords() {
+	a.DB.Exec("DELETE FROM transactions")
+	a.DB.Exec("ALTER SEQUENCE transactions_id_seq RESTART WITH 1")
+
 	a.DB.Exec("DELETE FROM accounts")
 	a.DB.Exec("ALTER SEQUENCE accounts_id_seq RESTART WITH 1")
 
 	a.DB.Exec("DELETE FROM customers")
 	a.DB.Exec("ALTER SEQUENCE customers_id_seq RESTART WITH 1")
-
-	a.DB.Exec("DELETE FROM transactions")
-	a.DB.Exec("ALTER SEQUENCE transactions_id_seq RESTART WITH 1")
 }

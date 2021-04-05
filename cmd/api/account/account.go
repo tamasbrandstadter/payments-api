@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Rhymond/go-money"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -14,11 +15,11 @@ import (
 var InvalidAccounts = errors.New("invalid transfer, account ids are not found")
 
 type FundsError struct {
-	Balance float64
+	balance string
 }
 
 func (fe *FundsError) Error() string {
-	return fmt.Sprintf("insufficient funds, balance: %.2f", fe.Balance)
+	return fmt.Sprintf("insufficient funds, balance: %s", fe.balance)
 }
 
 type InvalidTransferError struct {
@@ -29,20 +30,14 @@ func (te *InvalidTransferError) Error() string {
 	return fmt.Sprintf("invalid transfer, account id %d not found", te.MissingAccountID)
 }
 
-type Currency string
-
-func (c Currency) Supported() bool {
-	return c == "EUR" || c == "GBP" || c == "USD"
-}
-
 type Account struct {
-	ID         int       `json:"id" db:"id"`
-	CustomerID int       `json:"customerId" db:"customer_id"`
-	Balance    float64   `json:"balance" db:"balance"`
-	Currency   Currency  `json:"currency,omitempty" db:"currency"`
-	CreatedAt  time.Time `json:"createdAt" db:"created_at"`
-	ModifiedAt time.Time `json:"modifiedAt" db:"modified_at"`
-	Frozen     bool      `json:"frozen" db:"frozen"`
+	ID               int       `json:"id" db:"id"`
+	CustomerID       int       `json:"customerId" db:"customer_id"`
+	BalanceInDecimal int64     `json:"balanceInDecimal" db:"balance_in_decimal"`
+	Currency         string    `json:"currency,omitempty" db:"currency"`
+	CreatedAt        time.Time `json:"createdAt" db:"created_at"`
+	ModifiedAt       time.Time `json:"modifiedAt" db:"modified_at"`
+	Frozen           bool      `json:"frozen" db:"frozen"`
 }
 
 func SelectAll(db *sqlx.DB) ([]Account, error) {
@@ -84,13 +79,15 @@ func Create(db *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error)
 		return Account{}, err
 	}
 
+	m := money.New(ar.InitialBalance, ar.Currency)
+
 	acc := Account{
-		CustomerID: customerId,
-		Balance:    ar.InitialBalance,
-		Currency:   ar.Currency,
-		CreatedAt:  time.Now().UTC(),
-		ModifiedAt: time.Now().UTC(),
-		Frozen:     false,
+		CustomerID:       customerId,
+		BalanceInDecimal: m.Amount(),
+		Currency:         m.Currency().Code,
+		CreatedAt:        time.Now().UTC(),
+		ModifiedAt:       time.Now().UTC(),
+		Frozen:           false,
 	}
 
 	stmt, err := tx.Prepare(insert)
@@ -99,7 +96,7 @@ func Create(db *sqlx.DB, customerId int, ar AccCreationRequest) (Account, error)
 		return Account{}, err
 	}
 
-	row := stmt.QueryRow(acc.CustomerID, acc.Balance, acc.Currency, acc.CreatedAt, acc.ModifiedAt)
+	row := stmt.QueryRow(acc.CustomerID, acc.BalanceInDecimal, acc.Currency, acc.CreatedAt, acc.ModifiedAt)
 
 	if err = row.Scan(&acc.ID); err != nil {
 		_ = tx.Rollback()
@@ -180,13 +177,13 @@ func Freeze(db *sqlx.DB, id int) (Account, error) {
 	return acc, nil
 }
 
-func Deposit(db *sqlx.DB, id int, amount float64) (Account, error) {
+func Deposit(db *sqlx.DB, id int, amount int64) error {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
 	defer cancelFunc()
 
 	tx, err := db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
-		return Account{}, err
+		return err
 	}
 
 	var acc Account
@@ -196,46 +193,53 @@ func Deposit(db *sqlx.DB, id int, amount float64) (Account, error) {
 	err = row.StructScan(&acc)
 	if errors.Cause(err) == sql.ErrNoRows {
 		_ = tx.Rollback()
-		return Account{}, sql.ErrNoRows
+		return sql.ErrNoRows
 	} else if err != nil {
 		_ = tx.Rollback()
-		return Account{}, err
+		return err
 	}
 
-	modifiedAt := time.Now().UTC()
-	newBalance := acc.Balance + amount
+	balance := money.New(acc.BalanceInDecimal, acc.Currency)
+	deposit := money.New(amount, acc.Currency)
+	newBalance, err := balance.Add(deposit)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 
 	stmt, err := tx.Prepare(updateBalance)
 	if err != nil {
-		return Account{}, err
+		return err
 	}
 
-	if _, err = stmt.Exec(newBalance, modifiedAt, id); err != nil {
+	modifiedAt := time.Now().UTC()
+
+	if _, err = stmt.Exec(newBalance.Amount(), modifiedAt, id); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("deposit for account id %d was rolled back, error: %v", id, err)
-		return Account{}, err
+		return err
 	}
 
 	if err = tx.Commit(); err != nil {
 		log.Errorf("failed to commit deposit to account id %d, error: %v", id, err)
-		return Account{}, err
+		return err
 	}
 
 	acc.ModifiedAt = modifiedAt
-	acc.Balance = newBalance
+	acc.BalanceInDecimal = newBalance.Amount()
 
-	log.Infof("successfully deposited amount %.2f to account id %d", amount, id)
+	log.Infof("successfully deposited %s to account id %d", deposit.Display(), id)
 
-	return acc, nil
+	return nil
 }
 
-func Withdraw(db *sqlx.DB, id int, amount float64) (Account, error) {
+func Withdraw(db *sqlx.DB, id int, amount int64) error {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
 	defer cancelFunc()
 
 	tx, err := db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
-		return Account{}, err
+		return err
 	}
 
 	var acc Account
@@ -245,46 +249,55 @@ func Withdraw(db *sqlx.DB, id int, amount float64) (Account, error) {
 	err = row.StructScan(&acc)
 	if errors.Cause(err) == sql.ErrNoRows {
 		_ = tx.Rollback()
-		return Account{}, sql.ErrNoRows
+		return sql.ErrNoRows
 	} else if err != nil {
 		_ = tx.Rollback()
-		return Account{}, err
+		return err
 	}
 
-	newBalance := acc.Balance - amount
-	if newBalance < 0 {
+	balance := money.New(acc.BalanceInDecimal, acc.Currency)
+	withdraw := money.New(amount, acc.Currency)
+
+	less, _ := balance.LessThan(withdraw)
+	if less {
 		_ = tx.Rollback()
 		log.Warnf("withdraw for account id %d was rolled back due to insufficient funds", id)
-		return Account{}, &FundsError{Balance: acc.Balance}
+		return &FundsError{balance: balance.Display()}
+	}
+
+	newBalance, err := balance.Subtract(withdraw)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
 	}
 	modifiedAt := time.Now().UTC()
 
 	stmt, err := tx.Prepare(updateBalance)
 	if err != nil {
 		_ = tx.Rollback()
-		return Account{}, err
+		return err
 	}
 
-	if _, err = stmt.Exec(newBalance, modifiedAt, id); err != nil {
+	if _, err = stmt.Exec(newBalance.Amount(), modifiedAt, id); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("withdraw from account id %d was rolled back, error: %v", id, err)
-		return Account{}, err
+		return err
 	}
 
 	if err = tx.Commit(); err != nil {
 		log.Errorf("failed to commit withdraw from account, error: %v", err)
-		return Account{}, err
+		return err
 	}
 
 	acc.ModifiedAt = modifiedAt
-	acc.Balance = newBalance
+	acc.BalanceInDecimal = newBalance.Amount()
 
-	log.Infof("successfully withdrew amount %.2f from account %d", amount, id)
+	log.Infof("successfully withdrew %s from account %d", withdraw.Display(), id)
 
-	return acc, nil
+	return nil
 }
 
-func Transfer(db *sqlx.DB, fromId int, toId int, amount float64) error {
+func Transfer(db *sqlx.DB, fromId int, toId int, amount int64) error {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
 	defer cancelFunc()
 
@@ -318,13 +331,17 @@ func Transfer(db *sqlx.DB, fromId int, toId int, amount float64) error {
 	from := accounts[0]
 	to := accounts[1]
 
-	if from.Balance < amount {
+	balance := money.New(from.BalanceInDecimal, from.Currency)
+	transfer := money.New(amount, from.Currency)
+	less, _ := balance.LessThan(transfer)
+	if less {
 		_ = tx.Rollback()
-		return &FundsError{Balance: from.Balance}
+		log.Warnf("transfer from account id %d to account id %d was rolled back due to insufficient funds", from.ID, to.ID)
+		return &FundsError{balance: balance.Display()}
 	}
 
-	fromNewBalance := from.Balance - amount
-	toNewBalance := to.Balance + amount
+	fromNewBalance, _ := balance.Subtract(transfer)
+	toNewBalance, _ := money.New(to.BalanceInDecimal, to.Currency).Add(transfer)
 
 	modifiedAt := time.Now().UTC()
 
@@ -334,7 +351,7 @@ func Transfer(db *sqlx.DB, fromId int, toId int, amount float64) error {
 		return err
 	}
 
-	if _, err = stmt.Exec(from.ID, fromNewBalance, modifiedAt, to.ID, toNewBalance, modifiedAt); err != nil {
+	if _, err = stmt.Exec(from.ID, fromNewBalance.Amount(), modifiedAt, to.ID, toNewBalance.Amount(), modifiedAt); err != nil {
 		_ = tx.Rollback()
 		log.Warnf("transfer from account id %d to account id %d was rolled back, error: %v", fromId, toId, err)
 		return err
@@ -345,7 +362,7 @@ func Transfer(db *sqlx.DB, fromId int, toId int, amount float64) error {
 		return err
 	}
 
-	log.Infof("successfully transfered amount %.2f from account id %d to account id %d", amount, fromId, toId)
+	log.Infof("successfully transfered %s from account id %d to account id %d", transfer.Display(), from.ID, to.ID)
 
 	return nil
 }

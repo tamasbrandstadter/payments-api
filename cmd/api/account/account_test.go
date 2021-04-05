@@ -21,8 +21,8 @@ func TestSelectAll(t *testing.T) {
 	query := "SELECT \\* FROM accounts;"
 
 	utc := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(11, 22, 999.0, "EUR", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(11, 22, 99900, "EUR", utc, utc, false)
 
 	mock.ExpectQuery(query).WillReturnRows(rows)
 
@@ -34,8 +34,8 @@ func TestSelectAll(t *testing.T) {
 	actualAcc := accounts[0]
 	assert.Equal(t, 11, actualAcc.ID)
 	assert.Equal(t, 22, actualAcc.CustomerID)
-	assert.Equal(t, 999.0, actualAcc.Balance)
-	assert.Equal(t, Currency("EUR"), actualAcc.Currency)
+	assert.Equal(t, int64(99900), actualAcc.BalanceInDecimal)
+	assert.Equal(t, "EUR", actualAcc.Currency)
 	assert.NotNil(t, actualAcc.CreatedAt)
 	assert.NotNil(t, actualAcc.ModifiedAt)
 	assert.False(t, actualAcc.Frozen)
@@ -59,13 +59,13 @@ func TestSelectById(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	query := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	query := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, true)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 23240, "GBP", utc, utc, true)
 
 	mock.ExpectPrepare(query).ExpectQuery().WithArgs(1).WillReturnRows(rows)
 
@@ -75,8 +75,8 @@ func TestSelectById(t *testing.T) {
 	assert.NotNil(t, actualAcc)
 	assert.Equal(t, accId, actualAcc.ID)
 	assert.Equal(t, 11, actualAcc.CustomerID)
-	assert.Equal(t, 232.4, actualAcc.Balance)
-	assert.Equal(t, Currency("GBP"), actualAcc.Currency)
+	assert.Equal(t, int64(23240), actualAcc.BalanceInDecimal)
+	assert.Equal(t, "GBP", actualAcc.Currency)
 	assert.NotNil(t, actualAcc.CreatedAt)
 	assert.NotNil(t, actualAcc.ModifiedAt)
 	assert.True(t, actualAcc.Frozen)
@@ -86,7 +86,7 @@ func TestSelectByIdError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	query := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	query := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	mock.ExpectPrepare(query).ExpectQuery().WithArgs(1).WillReturnError(sql.ErrNoRows)
 
@@ -99,7 +99,7 @@ func TestCreate(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	query := "INSERT INTO accounts\\(customer_id, balance, currency, created_at, modified_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
+	query := "INSERT INTO accounts\\(customer_id, balance_in_decimal, currency, created_at, modified_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
 
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(11)
 
@@ -107,8 +107,8 @@ func TestCreate(t *testing.T) {
 		FirstName:      "first",
 		LastName:       "last",
 		Email:          "first@last.com",
-		InitialBalance: 111.0,
-		Currency:       Currency("EUR"),
+		InitialBalance: 11100,
+		Currency:       "EUR",
 	}
 
 	mock.ExpectBegin()
@@ -126,7 +126,7 @@ func TestCreate(t *testing.T) {
 	assert.NotNil(t, actualAcc)
 	assert.Equal(t, 11, actualAcc.ID)
 	assert.Equal(t, customerId, actualAcc.CustomerID)
-	assert.Equal(t, request.InitialBalance, actualAcc.Balance)
+	assert.Equal(t, request.InitialBalance, actualAcc.BalanceInDecimal)
 	assert.Equal(t, request.Currency, actualAcc.Currency)
 	assert.False(t, actualAcc.Frozen)
 	assert.NotNil(t, actualAcc.CreatedAt)
@@ -137,14 +137,14 @@ func TestCreateError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	query := "INSERT INTO accounts\\(customer_id, balance, currency, created_at, modified_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
+	query := "INSERT INTO accounts\\(customer_id, balance_in_decimal, currency, created_at, modified_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
 
 	request := AccCreationRequest{
 		FirstName:      "first",
 		LastName:       "last",
 		Email:          "first@last.com",
-		InitialBalance: 111.0,
-		Currency:       Currency("EUR"),
+		InitialBalance: 11100,
+		Currency:       "EUR",
 	}
 
 	mock.ExpectBegin()
@@ -163,13 +163,13 @@ func TestDelete(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, true)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 232400, "GBP", utc, utc, true)
 
 	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnRows(rows)
 
@@ -189,7 +189,7 @@ func TestDeleteErrorInSelect(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 
@@ -205,13 +205,13 @@ func TestDeleteErrorInDelete(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, true)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 23240, "GBP", utc, utc, true)
 
 	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnRows(rows)
 
@@ -231,13 +231,13 @@ func TestFreeze(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 23240, "GBP", utc, utc, false)
 
 	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnRows(rows)
 
@@ -259,7 +259,7 @@ func TestFreezeErrorInSelect(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 
@@ -275,13 +275,13 @@ func TestFreezeErrorInUpdate(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 23240, "GBP", utc, utc, false)
 
 	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnRows(rows)
 
@@ -301,50 +301,48 @@ func TestDeposit(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 23240, "GBP", utc, utc, false)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(selectQuery).WithArgs(1).WillReturnRows(rows)
 
-	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+	balanceQuery := "UPDATE accounts SET balance_in_decimal=\\$1, modified_at=\\$2 WHERE id=\\$3;"
 
-	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(237.65, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(23765, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	actualAcc, err := Deposit(db, accId, 5.25)
+	err := Deposit(db, accId, 525)
 
 	assert.NoError(t, err)
-	assert.True(t, actualAcc.ModifiedAt.After(utc))
-	assert.Equal(t, 237.65, actualAcc.Balance)
 }
 
 func TestDepositError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 23240, "GBP", utc, utc, false)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(selectQuery).WithArgs(1).WillReturnRows(rows)
 
-	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+	balanceQuery := "UPDATE accounts SET balance_in_decimal=\\$1, modified_at=\\$2 WHERE id=\\$3;"
 
-	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(237.65, sqlmock.AnyArg(), 1).WillReturnError(sql.ErrConnDone)
+	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(23765, sqlmock.AnyArg(), 1).WillReturnError(sql.ErrConnDone)
 	mock.ExpectRollback()
 
-	_, err := Deposit(db, accId, 5.25)
+	err := Deposit(db, accId, 525)
 	if errors.Cause(err) != sql.ErrConnDone {
 		t.Errorf("account deposit test failed err expected sql.ErrConnDone but got: %v:", err)
 	}
@@ -354,50 +352,48 @@ func TestWithdraw(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 23240, "GBP", utc, utc, false)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(selectQuery).WithArgs(1).WillReturnRows(rows)
 
-	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+	balanceQuery := "UPDATE accounts SET balance_in_decimal=\\$1, modified_at=\\$2 WHERE id=\\$3;"
 
-	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(230.00, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(23000, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	actualAcc, err := Withdraw(db, accId, 2.4)
+	err := Withdraw(db, accId, 240)
 
 	assert.NoError(t, err)
-	assert.True(t, actualAcc.ModifiedAt.After(utc))
-	assert.Equal(t, 230.00, actualAcc.Balance)
 }
 
 func TestWithdrawInsufficientFundsError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 232.4, "GBP", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 23240, "GBP", utc, utc, false)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(selectQuery).WithArgs(1).WillReturnRows(rows)
 
-	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+	balanceQuery := "UPDATE accounts SET balance_in_decimal=\\$1, modified_at=\\$2 WHERE id=\\$3;"
 
-	mock.ExpectPrepare(balanceQuery).ExpectQuery().WithArgs(1000.00, sqlmock.AnyArg(), 1).WillReturnRows()
+	mock.ExpectPrepare(balanceQuery).ExpectQuery().WithArgs(100000, sqlmock.AnyArg(), 1).WillReturnRows()
 	mock.ExpectRollback()
 
-	_, err := Withdraw(db, accId, 1000.00)
+	err := Withdraw(db, accId, 100000)
 	err, ok := err.(*FundsError)
 	if !ok {
 		t.Errorf("withdraw test failed err expected FundsError but got: %v:", err)
@@ -408,23 +404,23 @@ func TestTransfer(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	query := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
 
-	rows := sqlmock.NewRows([]string{"id", "balance"}).
-		AddRow(1, 230.5).AddRow(2, 15.6)
+	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal"}).
+		AddRow(1, 23050).AddRow(2, 1560)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(1, 2).WillReturnRows(rows)
 
-	updateQuery := "UPDATE accounts as u SET balance = u2.balance, modified_at = u2.modified_at FROM " +
+	updateQuery := "UPDATE accounts as a SET balance_in_decimal = a2.balance_in_decimal, modified_at = a2.modified_at FROM " +
 		"\\(values \\(\\$1::integer, \\$2::decimal, \\$3::timestamp\\), \\(\\$4::integer, \\$5::decimal, \\$6::timestamp\\)\\) " +
-		"as u2\\(id, balance, modified_at\\) WHERE u2.id = u.id;"
+		"as a2\\(id, balance_in_decimal, modified_at\\) WHERE a2.id = a.id;"
 
-	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(1, 225.5, sqlmock.AnyArg(), 2, 20.6, sqlmock.AnyArg()).
+	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(1, 22550, sqlmock.AnyArg(), 2, 2060, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(2, 2))
 	mock.ExpectCommit()
 
-	err := Transfer(db, 1, 2, 5.0)
+	err := Transfer(db, 1, 2, 500)
 	if err != nil {
 		t.Errorf("transfer test failed, expected nil error got: %v", err)
 	}
@@ -434,14 +430,14 @@ func TestTransferErrorAccountsNotFound(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
-	rows := sqlmock.NewRows([]string{"id", "balance"})
+	query := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal"})
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(1, 2).WillReturnRows(rows)
 	mock.ExpectRollback()
 
-	err := Transfer(db, 1, 2, 5.0)
+	err := Transfer(db, 1, 2, 500)
 	assert.Error(t, err)
 	assert.True(t, errors.Cause(err) == InvalidAccounts)
 }
@@ -453,14 +449,14 @@ func TestTransferErrorFromAccountNotFound(t *testing.T) {
 	fromId := 1
 	toId := 2
 
-	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
-	rows := sqlmock.NewRows([]string{"id", "balance"}).AddRow(toId, 24.5)
+	query := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal"}).AddRow(toId, 2450)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
 	mock.ExpectRollback()
 
-	err := Transfer(db, fromId, toId, 5.0)
+	err := Transfer(db, fromId, toId, 500)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid transfer, account id 1 not found", err.Error())
 }
@@ -472,14 +468,14 @@ func TestTransferErrorToAccountNotFound(t *testing.T) {
 	fromId := 1
 	toId := 2
 
-	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
-	rows := sqlmock.NewRows([]string{"id", "balance"}).AddRow(fromId, 24.5)
+	query := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal"}).AddRow(fromId, 2405)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
 	mock.ExpectRollback()
 
-	err := Transfer(db, fromId, toId, 5.0)
+	err := Transfer(db, fromId, toId, 500)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid transfer, account id 2 not found", err.Error())
 }
@@ -491,14 +487,14 @@ func TestTransferErrorInsufficientFunds(t *testing.T) {
 	fromId := 1
 	toId := 2
 
-	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
-	rows := sqlmock.NewRows([]string{"id", "balance"}).AddRow(fromId, 24.5).AddRow(toId, 5.0)
+	query := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal"}).AddRow(fromId, 2450).AddRow(toId, 500)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
 	mock.ExpectRollback()
 
-	err := Transfer(db, fromId, toId, 12225.0)
+	err := Transfer(db, fromId, toId, 1222500)
 	assert.Error(t, err)
 	assert.Equal(t, "insufficient funds, balance: 24.50", err.Error())
 }
@@ -510,21 +506,21 @@ func TestTransferExecError(t *testing.T) {
 	fromId := 1
 	toId := 2
 
-	query := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
-	rows := sqlmock.NewRows([]string{"id", "balance"}).AddRow(fromId, 24.5).AddRow(toId, 5.0)
+	query := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
+	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal"}).AddRow(fromId, 2405).AddRow(toId, 500)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
 
-	updateQuery := "UPDATE accounts as u SET balance = u2.balance, modified_at = u2.modified_at FROM " +
+	updateQuery := "UPDATE accounts as a SET balance_in_decimal = a2.balance_in_decimal, modified_at = a2.modified_at FROM " +
 		"\\(values \\(\\$1::integer, \\$2::decimal, \\$3::timestamp\\), \\(\\$4::integer, \\$5::decimal, \\$6::timestamp\\)\\) " +
-		"as u2\\(id, balance, modified_at\\) WHERE u2.id = u.id;"
+		"as a2\\(id, balance_in_decimal, modified_at\\) WHERE a2.id = a.id;"
 
-	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(1, 20.5, sqlmock.AnyArg(), 2, 9.0, sqlmock.AnyArg()).
+	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(1, 2005, sqlmock.AnyArg(), 2, 900, sqlmock.AnyArg()).
 		WillReturnError(sql.ErrConnDone)
 	mock.ExpectRollback()
 
-	err := Transfer(db, 1, 2, 4.0)
+	err := Transfer(db, 1, 2, 400)
 	assert.Error(t, err)
 }
 

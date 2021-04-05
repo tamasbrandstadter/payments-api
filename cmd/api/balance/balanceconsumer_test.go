@@ -20,27 +20,27 @@ func TestHandleDeposit(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	msg := []byte("{\"id\":1,\"amount\":1}")
+	msg := []byte("{\"id\":1,\"amount\":10}")
 
 	d := amqp.Delivery{
 		ContentType: "application/json",
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 15.5, "GBP", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 155, "GBP", utc, utc, false)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(selectQuery).WithArgs(accId).WillReturnRows(rows)
 
-	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+	balanceQuery := "UPDATE accounts SET balance_in_decimal=\\$1, modified_at=\\$2 WHERE id=\\$3;"
 
-	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(16.5, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(165, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	auditQuery := "INSERT INTO transactions\\(from_id, to_id, transaction_type, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
@@ -78,7 +78,7 @@ func TestHandleDepositAmountError(t *testing.T) {
 	db, _ := NewMockDb()
 	defer db.Close()
 
-	msg := []byte("{\"id\":1,\"amount\":-1}")
+	msg := []byte("{\"id\":1,\"amount\":-100}")
 
 	d := amqp.Delivery{
 		ContentType: "application/json",
@@ -95,14 +95,14 @@ func TestHandleDepositNotFoundError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	msg := []byte("{\"id\":1,\"amount\":1}")
+	msg := []byte("{\"id\":1,\"amount\":100}")
 
 	d := amqp.Delivery{
 		ContentType: "application/json",
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 
@@ -120,14 +120,14 @@ func TestHandleDepositServerError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	msg := []byte("{\"id\":1,\"amount\":1}")
+	msg := []byte("{\"id\":1,\"amount\":100}")
 
 	d := amqp.Delivery{
 		ContentType: "application/json",
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 
@@ -144,26 +144,26 @@ func TestHandleWithdraw(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	msg := []byte("{\"id\":1,\"amount\":1}")
+	msg := []byte("{\"id\":1,\"amount\":10}")
 
 	d := amqp.Delivery{
 		ContentType: "application/json",
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 	utc := time.Now().UTC()
 
-	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance", "currency", "created_at", "modified_at", "frozen"}).
-		AddRow(1, 11, 15.5, "GBP", utc, utc, false)
+	rows := sqlmock.NewRows([]string{"id", "customer_id", "balance_in_decimal", "currency", "created_at", "modified_at", "frozen"}).
+		AddRow(1, 11, 155, "GBP", utc, utc, false)
 
-	balanceQuery := "UPDATE accounts SET balance=\\$1, modified_at=\\$2 WHERE id=\\$3;"
+	balanceQuery := "UPDATE accounts SET balance_in_decimal=\\$1, modified_at=\\$2 WHERE id=\\$3;"
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(selectQuery).WithArgs(accId).WillReturnRows(rows)
-	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(14.5, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(145, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	auditQuery := "INSERT INTO transactions\\(from_id, to_id, transaction_type, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
@@ -225,7 +225,7 @@ func TestHandleWithdrawNotFoundError(t *testing.T) {
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 
@@ -250,7 +250,7 @@ func TestHandleWithdrawServerError(t *testing.T) {
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, customer_id, balance, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
+	selectQuery := "SELECT id, customer_id, balance_in_decimal, currency, created_at, modified_at, frozen FROM accounts WHERE id=\\$1;"
 
 	accId := 1
 
@@ -267,29 +267,29 @@ func TestHandleTransfer(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
-	msg := []byte("{\"from\":1,\"to\":2,\"amount\":1}")
+	msg := []byte("{\"from\":1,\"to\":2,\"amount\":10}")
 
 	d := amqp.Delivery{
 		ContentType: "application/json",
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	selectQuery := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
 
 	from := 1
 	to := 2
 
-	rows := sqlmock.NewRows([]string{"id", "balance"}).
-		AddRow(1, 15.5).AddRow(2, 5.6)
+	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal", "currency"}).
+		AddRow(1, 155, "EUR").AddRow(2, 56, "EUR")
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(selectQuery).WithArgs(from, to).WillReturnRows(rows)
 
-	updateQuery := "UPDATE accounts as u SET balance = u2.balance, modified_at = u2.modified_at FROM " +
+	updateQuery := "UPDATE accounts as a SET balance_in_decimal = a2.balance_in_decimal, modified_at = a2.modified_at FROM " +
 		"\\(values \\(\\$1::integer, \\$2::decimal, \\$3::timestamp\\), \\(\\$4::integer, \\$5::decimal, \\$6::timestamp\\)\\) " +
-		"as u2\\(id, balance, modified_at\\) WHERE u2.id = u.id;"
+		"as a2\\(id, balance_in_decimal, modified_at\\) WHERE a2.id = a.id;"
 
-	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(from, 14.5, sqlmock.AnyArg(), to, 6.6, sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(2, 2))
+	mock.ExpectPrepare(updateQuery).ExpectExec().WithArgs(from, 145, sqlmock.AnyArg(), to, 66, sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(2, 2))
 	mock.ExpectCommit()
 
 	auditQuery := "INSERT INTO transactions\\(from_id, to_id, transaction_type, ack, created_at\\) VALUES\\(\\$1,\\$2,\\$3,\\$4,\\$5\\) RETURNING id;"
@@ -351,7 +351,7 @@ func TestHandleTransferAccountNotFoundError(t *testing.T) {
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	selectQuery := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
 
 	from := 1
 	to := 2
@@ -377,7 +377,7 @@ func TestHandleTransferServerError(t *testing.T) {
 		Body:        msg,
 	}
 
-	selectQuery := "SELECT id, balance FROM accounts WHERE id=\\$1 OR id=\\$2"
+	selectQuery := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
 
 	from := 1
 	to := 2
