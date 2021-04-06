@@ -10,6 +10,7 @@ import (
 	"github.com/streadway/amqp"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/balance"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/handler"
+	"github.com/tamasbrandstadter/payments-api/internal/cache"
 	"github.com/tamasbrandstadter/payments-api/internal/db"
 	"github.com/tamasbrandstadter/payments-api/internal/env"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
@@ -46,8 +47,8 @@ func main() {
 		Pass:         envCfg.MQPass,
 		Host:         envCfg.MQHost,
 		Port:         envCfg.MQPort,
-		Concurrency:  5,
-		MaxReconnect: 5,
+		Concurrency:  envCfg.MQConcurrency,
+		MaxReconnect: envCfg.MQMaxReconnect,
 	}
 	conn, err := mq.NewConnection(mqCfg)
 	if err != nil {
@@ -58,6 +59,20 @@ func main() {
 	defer func() {
 		if err := conn.Channel.Close(); err != nil {
 			log.Errorf("error closing mq channel: %v", err)
+		}
+	}()
+
+	redisCfg := cache.Config{
+		Host: envCfg.CacheHost,
+		Pass: envCfg.CachePass,
+		Port: envCfg.CachePort,
+	}
+
+	redis := cache.NewConnection(redisCfg)
+
+	defer func() {
+		if err := redis.Client.Close(); err != nil {
+			log.Errorf("error closing redis client: %v", err)
 		}
 	}()
 
@@ -75,7 +90,7 @@ func main() {
 
 	server := http.Server{
 		Addr:           fmt.Sprintf(":%d", 8080),
-		Handler:        handler.NewApplication(dbc),
+		Handler:        handler.NewApplication(dbc, redis),
 		ReadTimeout:    envCfg.ReadTimeout,
 		WriteTimeout:   envCfg.WriteTimeout,
 		MaxHeaderBytes: 1 << 20,
@@ -90,8 +105,8 @@ func main() {
 		}
 	}()
 
-	tc.StartConsume(conn, dbc)
-	go tc.ClosedConnectionListener(mqCfg, dbc, conn.Channel.NotifyClose(make(chan *amqp.Error)))
+	tc.StartConsuming(conn, dbc, redis)
+	go tc.ClosedConnectionListener(mqCfg, dbc, conn.Channel.NotifyClose(make(chan *amqp.Error)), redis)
 
 	ctx, cancel := context.WithTimeout(context.Background(), envCfg.ShutdownTimeout)
 	defer cancel()

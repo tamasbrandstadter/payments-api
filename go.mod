@@ -6,6 +6,10 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Rhymond/go-money v1.0.2
 	github.com/avast/retry-go v3.0.0+incompatible
+	github.com/go-redis/cache v6.4.0+incompatible // indirect
+	github.com/go-redis/cache/v8 v8.4.0
+	github.com/go-redis/redis v6.15.9+incompatible
+	github.com/go-redis/redis/v8 v8.8.0
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.2.0
 	github.com/jmoiron/sqlx v1.3.1
@@ -15,5 +19,5 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/streadway/amqp v1.0.0
-	github.com/stretchr/testify v1.2.2
+	github.com/stretchr/testify v1.7.0
 )

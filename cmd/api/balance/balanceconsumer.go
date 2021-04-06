@@ -2,19 +2,24 @@ package balance
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
+	"github.com/Rhymond/go-money"
 	"github.com/avast/retry-go"
+	"github.com/go-redis/cache/v8"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/audit"
+	c "github.com/tamasbrandstadter/payments-api/internal/cache"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
 )
 
@@ -24,6 +29,8 @@ const (
 	transferConsumer = "transfer-consumer"
 )
 
+type fn func(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn, c *c.Redis) (bool, error)
+
 type TransactionConsumer struct {
 	Deposit     *amqp.Queue
 	Withdraw    *amqp.Queue
@@ -31,17 +38,17 @@ type TransactionConsumer struct {
 	Concurrency int
 }
 
-func (tc *TransactionConsumer) StartConsume(conn *mq.Conn, db *sqlx.DB) {
+func (tc *TransactionConsumer) StartConsuming(conn *mq.Conn, db *sqlx.DB, cache *c.Redis) {
 	forever := make(chan bool)
 
-	err := tc.startDeposits(conn, db)
+	err := tc.consumeDeposits(conn, db, cache)
 	if err != nil {
 		log.Errorf("error starting deposit consumer: %v", err)
 		attempt := 0
 		err = retry.Do(
 			func() error {
 				log.Infof("retrying to consume from deposits, attempt %b", attempt)
-				err = tc.startDeposits(conn, db)
+				err = tc.consumeDeposits(conn, db, cache)
 				if err != nil {
 					return err
 				}
@@ -51,14 +58,14 @@ func (tc *TransactionConsumer) StartConsume(conn *mq.Conn, db *sqlx.DB) {
 		)
 	}
 
-	err = tc.startWithdraws(conn, db)
+	err = tc.consumeWithdraws(conn, db, cache)
 	if err != nil {
 		log.Errorf("error starting withdraw consumer: %v", err)
 		attempt := 0
 		err = retry.Do(
 			func() error {
 				log.Infof("retrying to consume from withdraws, attempt %b", attempt)
-				err = tc.startWithdraws(conn, db)
+				err = tc.consumeWithdraws(conn, db, cache)
 				if err != nil {
 					return err
 				}
@@ -68,14 +75,14 @@ func (tc *TransactionConsumer) StartConsume(conn *mq.Conn, db *sqlx.DB) {
 		)
 	}
 
-	err = tc.startTransfers(conn, db)
+	err = tc.consumeTransfers(conn, db, cache)
 	if err != nil {
 		log.Errorf("error starting transfer consumer: %v", err)
 		attempt := 0
 		err = retry.Do(
 			func() error {
 				log.Infof("retrying to consume from transfers, attempt %b", attempt)
-				err = tc.startTransfers(conn, db)
+				err = tc.consumeTransfers(conn, db, cache)
 				if err != nil {
 					return err
 				}
@@ -88,7 +95,7 @@ func (tc *TransactionConsumer) StartConsume(conn *mq.Conn, db *sqlx.DB) {
 	<-forever
 }
 
-func (tc *TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error) {
+func (tc *TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.DB, closed <-chan *amqp.Error, redis *c.Redis) {
 	err := <-closed
 	if err != nil {
 		log.Errorf("closed mq connection: %v", err)
@@ -100,7 +107,7 @@ func (tc *TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.
 
 			if conn, err := mq.NewConnection(cfg); err == nil {
 				log.Info("reconnected to mq")
-				tc.StartConsume(conn, db)
+				tc.StartConsuming(conn, db, redis)
 			}
 
 			time.Sleep(1 * time.Second)
@@ -116,7 +123,7 @@ func (tc *TransactionConsumer) ClosedConnectionListener(cfg mq.Config, db *sqlx.
 	}
 }
 
-func (tc *TransactionConsumer) startDeposits(conn *mq.Conn, db *sqlx.DB) error {
+func (tc *TransactionConsumer) consumeDeposits(conn *mq.Conn, db *sqlx.DB, cache *c.Redis) error {
 	deposits, err := conn.Channel.Consume(tc.Deposit.Name, depositConsumer, false, false,
 		false, false, nil,
 	)
@@ -124,25 +131,12 @@ func (tc *TransactionConsumer) startDeposits(conn *mq.Conn, db *sqlx.DB) error {
 		return err
 	}
 
-	for i := 0; i < tc.Concurrency; i++ {
-		go func() {
-			for d := range deposits {
-				ok, err2 := handleDeposit(d, db, conn)
-				if err2 != nil {
-					_ = d.Nack(false, false)
-				} else if !ok {
-					_ = d.Nack(false, true)
-				} else {
-					_ = d.Ack(false)
-				}
-			}
-		}()
-	}
+	tc.handleMessage(conn, db, cache, deposits, deposit)
 
 	return nil
 }
 
-func (tc *TransactionConsumer) startWithdraws(conn *mq.Conn, db *sqlx.DB) error {
+func (tc *TransactionConsumer) consumeWithdraws(conn *mq.Conn, db *sqlx.DB, cache *c.Redis) error {
 	withdraws, err := conn.Channel.Consume(tc.Withdraw.Name, withdrawConsumer, false, false,
 		false, false, nil,
 	)
@@ -150,51 +144,42 @@ func (tc *TransactionConsumer) startWithdraws(conn *mq.Conn, db *sqlx.DB) error 
 		return err
 	}
 
-	for i := 0; i < tc.Concurrency; i++ {
-		go func() {
-			for w := range withdraws {
-				ok, err2 := handleWithdraw(w, db, conn)
-				if err2 != nil {
-					_ = w.Nack(false, false)
-				} else if !ok {
-					_ = w.Nack(false, true)
-				} else {
-					_ = w.Ack(false)
-				}
-			}
-		}()
-	}
+	tc.handleMessage(conn, db, cache, withdraws, withdraw)
 
 	return nil
 }
 
-func (tc *TransactionConsumer) startTransfers(conn *mq.Conn, db *sqlx.DB) error {
-	withdraws, err := conn.Channel.Consume(tc.Transfer.Name, transferConsumer, false, false,
+func (tc *TransactionConsumer) consumeTransfers(conn *mq.Conn, db *sqlx.DB, cache *c.Redis) error {
+	transfers, err := conn.Channel.Consume(tc.Transfer.Name, transferConsumer, false, false,
 		false, false, nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	for i := 0; i < tc.Concurrency; i++ {
-		go func() {
-			for w := range withdraws {
-				ok, err2 := handleTransfer(w, db, conn)
-				if err2 != nil {
-					_ = w.Nack(false, false)
-				} else if !ok {
-					_ = w.Nack(false, true)
-				} else {
-					_ = w.Ack(false)
-				}
-			}
-		}()
-	}
+	tc.handleMessage(conn, db, cache, transfers, transfer)
 
 	return nil
 }
 
-func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
+func (tc *TransactionConsumer) handleMessage(conn *mq.Conn, db *sqlx.DB, cache *c.Redis, msgs <-chan amqp.Delivery, f fn) {
+	for i := 0; i < tc.Concurrency; i++ {
+		go func() {
+			for m := range msgs {
+				ok, err := f(m, db, conn, cache)
+				if err != nil {
+					_ = m.Nack(false, false)
+				} else if !ok {
+					_ = m.Nack(false, true)
+				} else {
+					_ = m.Ack(false)
+				}
+			}
+		}()
+	}
+}
+
+func transfer(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn, c *c.Redis) (bool, error) {
 	var payload TransferMessage
 
 	r := bytes.NewReader(d.Body)
@@ -208,9 +193,9 @@ func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 		return false, err
 	}
 
-	err = account.Transfer(db, payload.FromID, payload.ToID, payload.Amount)
+	fromBalance, toBalance, err := account.Transfer(db, payload.FromID, payload.ToID, payload.Amount)
 	if err != nil {
-		if errors.Cause(err) == account.InvalidAccounts {
+		if errors.Cause(err) == account.InvalidAccountsError {
 			return false, err
 		}
 
@@ -225,6 +210,9 @@ func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 		return false, nil
 	}
 
+	updateBalanceCache(fromBalance, c, payload.FromID)
+	updateBalanceCache(toBalance, c, payload.ToID)
+
 	if err = audit.SaveAuditRecord(db, payload.FromID, payload.ToID, audit.Transfer, conn); err != nil {
 		log.Errorf("error saving audit record: %v", err)
 	}
@@ -232,7 +220,7 @@ func handleTransfer(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 	return true, nil
 }
 
-func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
+func deposit(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn, c *c.Redis) (bool, error) {
 	payload, err := decodeMessage(d)
 	if err != nil {
 		return false, err
@@ -243,13 +231,15 @@ func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 		return false, err
 	}
 
-	err = account.Deposit(db, payload.AccountID, payload.Amount)
+	balance, err := account.Deposit(db, payload.AccountID, payload.Amount)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.AccountID))
 		}
 		return false, nil
 	}
+
+	updateBalanceCache(balance, c, payload.AccountID)
 
 	if err = audit.SaveAuditRecord(db, payload.AccountID, 0, audit.Deposit, conn); err != nil {
 		log.Errorf("error saving audit record: %v", err)
@@ -258,7 +248,7 @@ func handleDeposit(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 	return true, nil
 }
 
-func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
+func withdraw(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn, c *c.Redis) (bool, error) {
 	payload, err := decodeMessage(d)
 	if err != nil {
 		return false, err
@@ -269,7 +259,7 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 		return false, err
 	}
 
-	err = account.Withdraw(db, payload.AccountID, payload.Amount)
+	balance, err := account.Withdraw(db, payload.AccountID, payload.Amount)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return false, errors.New(fmt.Sprintf("account id %d is not found", payload.AccountID))
@@ -282,6 +272,8 @@ func handleWithdraw(d amqp.Delivery, db *sqlx.DB, conn *mq.Conn) (bool, error) {
 
 		return false, nil
 	}
+
+	updateBalanceCache(balance, c, payload.AccountID)
 
 	if err = audit.SaveAuditRecord(db, payload.AccountID, 0, audit.Withdraw, conn); err != nil {
 		log.Errorf("error saving audit record: %v", err)
@@ -306,4 +298,20 @@ func validateAmount(amount int64) error {
 		return errors.New("balance operation amount can't be negative")
 	}
 	return nil
+}
+
+func updateBalanceCache(balance *money.Money, c *c.Redis, id int) {
+	value, err := balance.MarshalJSON()
+	if err == nil {
+		if err = c.Balances.Set(&cache.Item{
+			Ctx:   context.Background(),
+			Key:   strconv.Itoa(id),
+			Value: value,
+			TTL:   time.Hour,
+		}); err != nil {
+			log.Errorf("error setting new balance in cache for account id %d, error: %v", id, err)
+		}
+	} else {
+		log.Warnf("failed to marshal balance error: %v", err)
+	}
 }
