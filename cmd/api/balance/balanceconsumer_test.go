@@ -1,22 +1,26 @@
 package balance
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/Rhymond/go-money"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/stretchr/testify/assert"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/account"
+	"github.com/tamasbrandstadter/payments-api/internal/cache"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
+	"github.com/tamasbrandstadter/payments-api/internal/testcache"
 	"github.com/tamasbrandstadter/payments-api/internal/testmq"
 )
 
-func TestHandleDeposit(t *testing.T) {
+func TestDeposit(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -51,13 +55,14 @@ func TestHandleDeposit(t *testing.T) {
 	mock.ExpectPrepare(auditQuery).ExpectQuery().WithArgs(accId, 0, "deposit", true, sqlmock.AnyArg()).WillReturnRows(row)
 	mock.ExpectCommit()
 
-	ok, err := handleDeposit(d, db, NewConn())
+	ok, err := deposit(d, db, NewConn(), NewCache())
+
 	if !ok || err != nil {
 		t.Errorf("test handle deposit failed, ok true and err nil were expected got: %v and %v", ok, err)
 	}
 }
 
-func TestHandleDepositPayloadError(t *testing.T) {
+func TestDepositPayloadError(t *testing.T) {
 	db, _ := NewMockDb()
 	defer db.Close()
 
@@ -68,13 +73,14 @@ func TestHandleDepositPayloadError(t *testing.T) {
 		Body:        msg,
 	}
 
-	ok, err := handleDeposit(d, db, NewConn())
+	ok, err := deposit(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid message payload, unable to parse", err.Error())
 }
 
-func TestHandleDepositAmountError(t *testing.T) {
+func TestDepositAmountError(t *testing.T) {
 	db, _ := NewMockDb()
 	defer db.Close()
 
@@ -85,13 +91,14 @@ func TestHandleDepositAmountError(t *testing.T) {
 		Body:        msg,
 	}
 
-	ok, err := handleDeposit(d, db, NewConn())
+	ok, err := deposit(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "balance operation amount can't be negative", err.Error())
 }
 
-func TestHandleDepositNotFoundError(t *testing.T) {
+func TestDepositNotFoundError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -110,13 +117,14 @@ func TestHandleDepositNotFoundError(t *testing.T) {
 	mock.ExpectQuery(selectQuery).WithArgs(accId).WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
-	ok, err := handleDeposit(d, db, NewConn())
+	ok, err := deposit(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "account id 1 is not found", err.Error())
 }
 
-func TestHandleDepositServerError(t *testing.T) {
+func TestDepositServerError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -135,12 +143,13 @@ func TestHandleDepositServerError(t *testing.T) {
 	mock.ExpectQuery(selectQuery).WithArgs(accId).WillReturnError(errors.New("test"))
 	mock.ExpectRollback()
 
-	ok, err := handleDeposit(d, db, NewConn())
+	ok, err := deposit(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Nil(t, err)
 }
 
-func TestHandleWithdraw(t *testing.T) {
+func TestWithdraw(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -174,13 +183,14 @@ func TestHandleWithdraw(t *testing.T) {
 	mock.ExpectPrepare(auditQuery).ExpectQuery().WithArgs(accId, 0, "withdraw", true, sqlmock.AnyArg()).WillReturnRows(row)
 	mock.ExpectCommit()
 
-	ok, err := handleWithdraw(d, db, NewConn())
+	ok, err := withdraw(d, db, NewConn(), NewCache())
+
 	if !ok || err != nil {
 		t.Errorf("test handle withdraw failed, ok true and err nil were expected got: %v and %v", ok, err)
 	}
 }
 
-func TestHandleWithdrawPayloadError(t *testing.T) {
+func TestWithdrawPayloadError(t *testing.T) {
 	db, _ := NewMockDb()
 	defer db.Close()
 
@@ -191,13 +201,14 @@ func TestHandleWithdrawPayloadError(t *testing.T) {
 		Body:        msg,
 	}
 
-	ok, err := handleWithdraw(d, db, NewConn())
+	ok, err := withdraw(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid message payload, unable to parse", err.Error())
 }
 
-func TestHandleWithdrawAmountError(t *testing.T) {
+func TestWithdrawAmountError(t *testing.T) {
 	db, _ := NewMockDb()
 	defer db.Close()
 
@@ -208,13 +219,14 @@ func TestHandleWithdrawAmountError(t *testing.T) {
 		Body:        msg,
 	}
 
-	ok, err := handleWithdraw(d, db, NewConn())
+	ok, err := withdraw(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "balance operation amount can't be negative", err.Error())
 }
 
-func TestHandleWithdrawNotFoundError(t *testing.T) {
+func TestWithdrawNotFoundError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -233,13 +245,14 @@ func TestHandleWithdrawNotFoundError(t *testing.T) {
 	mock.ExpectQuery(selectQuery).WithArgs(accId).WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
-	ok, err := handleWithdraw(d, db, NewConn())
+	ok, err := withdraw(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "account id 1 is not found", err.Error())
 }
 
-func TestHandleWithdrawServerError(t *testing.T) {
+func TestWithdrawServerError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -258,14 +271,17 @@ func TestHandleWithdrawServerError(t *testing.T) {
 	mock.ExpectQuery(selectQuery).WithArgs(accId).WillReturnError(errors.New("test"))
 	mock.ExpectRollback()
 
-	ok, err := handleWithdraw(d, db, NewConn())
+	ok, err := withdraw(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Nil(t, err)
 }
 
-func TestHandleTransfer(t *testing.T) {
+func TestTransfer(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
+
+	redis := NewCache()
 
 	msg := []byte("{\"from\":1,\"to\":2,\"amount\":10}")
 
@@ -300,13 +316,34 @@ func TestHandleTransfer(t *testing.T) {
 	mock.ExpectPrepare(auditQuery).ExpectQuery().WithArgs(from, to, "transfer", true, sqlmock.AnyArg()).WillReturnRows(row)
 	mock.ExpectCommit()
 
-	ok, err := handleTransfer(d, db, NewConn())
+	ok, err := transfer(d, db, NewConn(), redis)
+
 	if !ok || err != nil {
-		t.Errorf("test handle deposit failed, ok true and err nil were expected got: %v and %v", ok, err)
+		t.Errorf("test handle transfer failed, ok true and err nil were expected got: %v and %v", ok, err)
 	}
+
+	var b []byte
+	if err = redis.Balances.Get(context.Background(), "1", &b); err != nil {
+		t.Errorf("test handle transfer failed, can't get balance from cache, error: %v", err)
+	}
+
+	var m money.Money
+	_ = m.UnmarshalJSON(b)
+
+	assert.Equal(t, int64(145), m.Amount())
+	assert.Equal(t, "EUR", m.Currency().Code)
+
+	if err = redis.Balances.Get(context.Background(), "2", &b); err != nil {
+		t.Errorf("test handle transfer failed, can't get balance from cache, error: %v", err)
+	}
+
+	_ = m.UnmarshalJSON(b)
+
+	assert.Equal(t, int64(66), m.Amount())
+	assert.Equal(t, "EUR", m.Currency().Code)
 }
 
-func TestHandleTransferPayloadError(t *testing.T) {
+func TestTransferPayloadError(t *testing.T) {
 	db, _ := NewMockDb()
 	defer db.Close()
 
@@ -317,13 +354,14 @@ func TestHandleTransferPayloadError(t *testing.T) {
 		Body:        msg,
 	}
 
-	ok, err := handleTransfer(d, db, NewConn())
+	ok, err := transfer(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid message payload, unable to parse", err.Error())
 }
 
-func TestHandleTransferAmountError(t *testing.T) {
+func TestTransferAmountError(t *testing.T) {
 	db, _ := NewMockDb()
 	defer db.Close()
 
@@ -334,13 +372,14 @@ func TestHandleTransferAmountError(t *testing.T) {
 		Body:        msg,
 	}
 
-	ok, err := handleTransfer(d, db, NewConn())
+	ok, err := transfer(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "balance operation amount can't be negative", err.Error())
 }
 
-func TestHandleTransferAccountNotFoundError(t *testing.T) {
+func TestTransferAccountNotFoundError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -357,16 +396,17 @@ func TestHandleTransferAccountNotFoundError(t *testing.T) {
 	to := 2
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(selectQuery).WithArgs(from, to).WillReturnError(account.InvalidAccounts)
+	mock.ExpectQuery(selectQuery).WithArgs(from, to).WillReturnError(account.InvalidAccountsError)
 	mock.ExpectRollback()
 
-	ok, err := handleTransfer(d, db, NewConn())
+	ok, err := transfer(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid transfer, account ids are not found", err.Error())
 }
 
-func TestHandleTransferServerError(t *testing.T) {
+func TestTransferServerError(t *testing.T) {
 	db, mock := NewMockDb()
 	defer db.Close()
 
@@ -386,7 +426,8 @@ func TestHandleTransferServerError(t *testing.T) {
 	mock.ExpectQuery(selectQuery).WithArgs(from, to).WillReturnError(errors.New("test"))
 	mock.ExpectRollback()
 
-	ok, err := handleTransfer(d, db, NewConn())
+	ok, err := transfer(d, db, NewConn(), NewCache())
+
 	assert.False(t, ok)
 	assert.Nil(t, err)
 }
@@ -408,4 +449,13 @@ func NewConn() *mq.Conn {
 	}
 
 	return conn
+}
+
+func NewCache() *cache.Redis {
+	redis, err := testcache.OpenConnection()
+	if err != nil {
+		log.Fatalf("an error '%s' was not expected when creating cache", err)
+	}
+
+	return redis
 }

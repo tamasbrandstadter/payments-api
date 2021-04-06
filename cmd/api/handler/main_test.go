@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/tamasbrandstadter/payments-api/cmd/api/balance"
 	"github.com/tamasbrandstadter/payments-api/internal/mq"
+	"github.com/tamasbrandstadter/payments-api/internal/testcache"
 	"github.com/tamasbrandstadter/payments-api/internal/testdb"
 	"github.com/tamasbrandstadter/payments-api/internal/testmq"
 )
@@ -47,8 +48,14 @@ func testMain(m *testing.M) int {
 		Concurrency: 5,
 	}
 
+	redis, err := testcache.OpenConnection()
+	if err != nil {
+		log.WithError(err).Info("create test cache")
+		return 1
+	}
+
 	a = &TestApp{
-		Handler: NewApplication(db),
+		Handler: NewApplication(db, redis),
 		DB:      db,
 		Conn:    conn,
 		Tc:      tc,

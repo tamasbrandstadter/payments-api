@@ -1,6 +1,12 @@
 version: '3.5'
 
 services:
+  redis:
+    image: redis:latest
+    container_name: redis
+    command: redis-server --requirepass securepass
+    ports:
+      - 6379:6379
   mq:
     image: rabbitmq:3.8.14-management
     container_name: mq

@@ -500,7 +500,7 @@ func TestDeposit(t *testing.T) {
 	})
 
 	go func() {
-		a.Tc.StartConsuming(a.Conn, a.DB, nil)
+		a.Tc.StartConsuming(a.Conn, a.DB, a.Handler.Cache)
 	}()
 
 	time.Sleep(time.Second / 2)

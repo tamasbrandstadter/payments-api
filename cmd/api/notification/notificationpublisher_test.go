@@ -34,8 +34,8 @@ func TestPublishSuccessfulTxNotification(t *testing.T) {
 		t.Errorf("test publish successfull tx notification failed, err nil expected, got: %v", err)
 	}
 
-	assert.Equal(t, txId, n.TransactionId)
-	assert.Equal(t, utc, n.CreatedAt)
+	assert.NotNil(t, txId, n.TransactionId)
+	assert.NotNil(t, utc, n.CreatedAt)
 	assert.True(t, n.Ack)
 }
 

@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewApplication(t *testing.T) {
-	app := NewApplication(NewMockDb())
+	app := NewApplication(NewMockDb(), nil)
 
 	assert.NotNil(t, app.handler)
 

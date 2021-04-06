@@ -112,13 +112,12 @@ func TestCreate(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-
 	mock.ExpectPrepare(query).ExpectQuery().WithArgs(customerId, request.InitialBalance, request.Currency, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(rows)
-
 	mock.ExpectCommit()
 
 	actualAcc, err := Create(db, customerId, request)
+
 	if err != nil {
 		t.Errorf("account creation test failed err expected nil but got: %v:", err)
 	}
@@ -180,6 +179,7 @@ func TestDelete(t *testing.T) {
 	mock.ExpectCommit()
 
 	err := Delete(db, accId)
+
 	if err != nil {
 		t.Errorf("account deletion test failed err expected nil but got: %v:", err)
 	}
@@ -196,6 +196,7 @@ func TestDeleteErrorInSelect(t *testing.T) {
 	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnError(sql.ErrNoRows)
 
 	err := Delete(db, accId)
+
 	if err != sql.ErrNoRows {
 		t.Errorf("account deletion test failed err expected sql.ErrNoRows but got: %v:", err)
 	}
@@ -222,6 +223,7 @@ func TestDeleteErrorInDelete(t *testing.T) {
 	mock.ExpectRollback()
 
 	err := Delete(db, accId)
+
 	if errors.Cause(err) != sql.ErrConnDone {
 		t.Errorf("account deletion test failed err expected sql.ErrConnDone but got: %v:", err)
 	}
@@ -266,6 +268,7 @@ func TestFreezeErrorInSelect(t *testing.T) {
 	mock.ExpectPrepare(selectQuery).ExpectQuery().WithArgs(1).WillReturnError(sql.ErrNoRows)
 
 	_, err := Freeze(db, accId)
+
 	if err != sql.ErrNoRows {
 		t.Errorf("account freeze test failed err expected sql.ErrNoRows but got: %v:", err)
 	}
@@ -292,6 +295,7 @@ func TestFreezeErrorInUpdate(t *testing.T) {
 	mock.ExpectRollback()
 
 	_, err := Freeze(db, accId)
+
 	if errors.Cause(err) != sql.ErrTxDone {
 		t.Errorf("account deletion test failed err expected sql.ErrTxDone but got: %v:", err)
 	}
@@ -317,9 +321,11 @@ func TestDeposit(t *testing.T) {
 	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(23765, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	err := Deposit(db, accId, 525)
+	balance, err := Deposit(db, accId, 525)
 
 	assert.NoError(t, err)
+	assert.Equal(t, int64(23765), balance.Amount())
+	assert.Equal(t, "GBP", balance.Currency().Code)
 }
 
 func TestDepositError(t *testing.T) {
@@ -342,10 +348,12 @@ func TestDepositError(t *testing.T) {
 	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(23765, sqlmock.AnyArg(), 1).WillReturnError(sql.ErrConnDone)
 	mock.ExpectRollback()
 
-	err := Deposit(db, accId, 525)
+	balance, err := Deposit(db, accId, 525)
+
 	if errors.Cause(err) != sql.ErrConnDone {
 		t.Errorf("account deposit test failed err expected sql.ErrConnDone but got: %v:", err)
 	}
+	assert.Nil(t, balance)
 }
 
 func TestWithdraw(t *testing.T) {
@@ -368,9 +376,11 @@ func TestWithdraw(t *testing.T) {
 	mock.ExpectPrepare(balanceQuery).ExpectExec().WithArgs(23000, sqlmock.AnyArg(), 1).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	err := Withdraw(db, accId, 240)
+	balance, err := Withdraw(db, accId, 240)
 
 	assert.NoError(t, err)
+	assert.Equal(t, int64(23000), balance.Amount())
+	assert.Equal(t, "GBP", balance.Currency().Code)
 }
 
 func TestWithdrawInsufficientFundsError(t *testing.T) {
@@ -393,11 +403,13 @@ func TestWithdrawInsufficientFundsError(t *testing.T) {
 	mock.ExpectPrepare(balanceQuery).ExpectQuery().WithArgs(100000, sqlmock.AnyArg(), 1).WillReturnRows()
 	mock.ExpectRollback()
 
-	err := Withdraw(db, accId, 100000)
+	balance, err := Withdraw(db, accId, 100000)
+
 	err, ok := err.(*FundsError)
 	if !ok {
 		t.Errorf("withdraw test failed err expected FundsError but got: %v:", err)
 	}
+	assert.Nil(t, balance)
 }
 
 func TestTransfer(t *testing.T) {
@@ -406,8 +418,8 @@ func TestTransfer(t *testing.T) {
 
 	query := "SELECT id, balance_in_decimal, currency FROM accounts WHERE id=\\$1 OR id=\\$2"
 
-	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal"}).
-		AddRow(1, 23050).AddRow(2, 1560)
+	rows := sqlmock.NewRows([]string{"id", "balance_in_decimal", "currency"}).
+		AddRow(1, 23050, "GBP").AddRow(2, 1560, "GBP")
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(query).WithArgs(1, 2).WillReturnRows(rows)
@@ -420,10 +432,15 @@ func TestTransfer(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(2, 2))
 	mock.ExpectCommit()
 
-	err := Transfer(db, 1, 2, 500)
+	fromBalance, toBalance, err := Transfer(db, 1, 2, 500)
+
 	if err != nil {
 		t.Errorf("transfer test failed, expected nil error got: %v", err)
 	}
+	assert.Equal(t, int64(22550), fromBalance.Amount())
+	assert.Equal(t, "GBP", fromBalance.Currency().Code)
+	assert.Equal(t, int64(2060), toBalance.Amount())
+	assert.Equal(t, "GBP", toBalance.Currency().Code)
 }
 
 func TestTransferErrorAccountsNotFound(t *testing.T) {
@@ -437,9 +454,12 @@ func TestTransferErrorAccountsNotFound(t *testing.T) {
 	mock.ExpectQuery(query).WithArgs(1, 2).WillReturnRows(rows)
 	mock.ExpectRollback()
 
-	err := Transfer(db, 1, 2, 500)
+	fromBalance, toBalance, err := Transfer(db, 1, 2, 500)
+
 	assert.Error(t, err)
-	assert.True(t, errors.Cause(err) == InvalidAccounts)
+	assert.True(t, errors.Cause(err) == InvalidAccountsError)
+	assert.Nil(t, fromBalance)
+	assert.Nil(t, toBalance)
 }
 
 func TestTransferErrorFromAccountNotFound(t *testing.T) {
@@ -456,9 +476,12 @@ func TestTransferErrorFromAccountNotFound(t *testing.T) {
 	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
 	mock.ExpectRollback()
 
-	err := Transfer(db, fromId, toId, 500)
+	fromBalance, toBalance, err := Transfer(db, fromId, toId, 500)
+
 	assert.Error(t, err)
 	assert.Equal(t, "invalid transfer, account id 1 not found", err.Error())
+	assert.Nil(t, fromBalance)
+	assert.Nil(t, toBalance)
 }
 
 func TestTransferErrorToAccountNotFound(t *testing.T) {
@@ -475,9 +498,12 @@ func TestTransferErrorToAccountNotFound(t *testing.T) {
 	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
 	mock.ExpectRollback()
 
-	err := Transfer(db, fromId, toId, 500)
+	fromBalance, toBalance, err := Transfer(db, fromId, toId, 500)
+
 	assert.Error(t, err)
 	assert.Equal(t, "invalid transfer, account id 2 not found", err.Error())
+	assert.Nil(t, fromBalance)
+	assert.Nil(t, toBalance)
 }
 
 func TestTransferErrorInsufficientFunds(t *testing.T) {
@@ -494,9 +520,12 @@ func TestTransferErrorInsufficientFunds(t *testing.T) {
 	mock.ExpectQuery(query).WithArgs(fromId, toId).WillReturnRows(rows)
 	mock.ExpectRollback()
 
-	err := Transfer(db, fromId, toId, 1222500)
+	fromBalance, toBalance, err := Transfer(db, fromId, toId, 1222500)
+
 	assert.Error(t, err)
 	assert.Equal(t, "insufficient funds, balance: 24.50", err.Error())
+	assert.Nil(t, fromBalance)
+	assert.Nil(t, toBalance)
 }
 
 func TestTransferExecError(t *testing.T) {
@@ -520,8 +549,11 @@ func TestTransferExecError(t *testing.T) {
 		WillReturnError(sql.ErrConnDone)
 	mock.ExpectRollback()
 
-	err := Transfer(db, 1, 2, 400)
+	fromBalance, toBalance, err := Transfer(db, 1, 2, 400)
+
 	assert.Error(t, err)
+	assert.Nil(t, fromBalance)
+	assert.Nil(t, toBalance)
 }
 
 func NewMockDb() (*sqlx.DB, sqlmock.Sqlmock) {
