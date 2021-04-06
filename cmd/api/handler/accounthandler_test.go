@@ -528,3 +528,61 @@ func TestWithdraw(t *testing.T) {
 	}
 	assert.Equal(t, int64(998), acc.BalanceInDecimal)
 }
+
+func TestTransfer(t *testing.T) {
+	r := account.AccCreationRequest{
+		FirstName:      "first2",
+		LastName:       "last2",
+		Email:          "test2@test1.com",
+		InitialBalance: 100,
+		Currency:       "EUR",
+	}
+
+	err := testdb.SaveCustomerWithAccount(a.DB, r)
+	if err != nil {
+		t.Errorf("error creating test customer with account: %v", err)
+	}
+
+	msg := []byte("{\"from\":3,\"to\":4,\"amount\":100}")
+
+	_ = a.Conn.Channel.Publish("payments", "trnsfr", false, false, amqp.Publishing{
+		Body:         msg,
+		ContentType:  "application/json",
+		DeliveryMode: amqp.Persistent,
+	})
+
+	time.Sleep(time.Second / 2)
+
+	acc, err := testdb.SelectById(a.DB, 3)
+	if err != nil {
+		t.Errorf("expected err nil, got %v", err)
+	}
+	assert.Equal(t, int64(898), acc.BalanceInDecimal)
+
+	acc, err = testdb.SelectById(a.DB, 4)
+	if err != nil {
+		t.Errorf("expected err nil, got %v", err)
+	}
+	assert.Equal(t, int64(200), acc.BalanceInDecimal)
+}
+
+func TestGetBalance(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "/accounts/3/balance", nil)
+	if err != nil {
+		t.Errorf("error creating request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	a.Handler.ServeHTTP(w, req)
+
+	if e, a := http.StatusOK, w.Code; e != a {
+		t.Errorf("expected status code: %v, got status code: %v", e, a)
+	}
+
+	var response map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("error decoding response body: %v", err)
+	}
+
+	assert.Equal(t, "€8.98", response["balance"])
+}

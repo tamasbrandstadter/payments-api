@@ -44,7 +44,7 @@ func (tc *TransactionConsumer) StartConsuming(conn *mq.Conn, db *sqlx.DB, cache 
 	err := tc.consumeDeposits(conn, db, cache)
 	if err != nil {
 		log.Errorf("error starting deposit consumer: %v", err)
-		attempt := 0
+		attempt := 1
 		err = retry.Do(
 			func() error {
 				log.Infof("retrying to consume from deposits, attempt %b", attempt)
@@ -61,7 +61,7 @@ func (tc *TransactionConsumer) StartConsuming(conn *mq.Conn, db *sqlx.DB, cache 
 	err = tc.consumeWithdraws(conn, db, cache)
 	if err != nil {
 		log.Errorf("error starting withdraw consumer: %v", err)
-		attempt := 0
+		attempt := 1
 		err = retry.Do(
 			func() error {
 				log.Infof("retrying to consume from withdraws, attempt %b", attempt)
@@ -78,7 +78,7 @@ func (tc *TransactionConsumer) StartConsuming(conn *mq.Conn, db *sqlx.DB, cache 
 	err = tc.consumeTransfers(conn, db, cache)
 	if err != nil {
 		log.Errorf("error starting transfer consumer: %v", err)
-		attempt := 0
+		attempt := 1
 		err = retry.Do(
 			func() error {
 				log.Infof("retrying to consume from transfers, attempt %b", attempt)
