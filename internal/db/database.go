@@ -10,6 +10,8 @@ import (
 
 var PSQLErrUniqueConstraint = "23505"
 
+const driver = "postgres"
+
 type Config struct {
 	User string
 	Pass string
@@ -22,11 +24,15 @@ func NewConnection(cfg Config) (*sqlx.DB, error) {
 	var db *sqlx.DB
 	var err error
 
-	conn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s, port=%d sslmode=disable",
-		cfg.User, cfg.Pass, cfg.Name, cfg.Host, cfg.Port)
+	dsn := fmt.Sprintf("postgres://%v:%v@%v:%v/%v?sslmode=disable",
+		cfg.User,
+		cfg.Pass,
+		cfg.Host,
+		cfg.Port,
+		cfg.Name)
 
 	log.Info("connecting to db")
-	if db, err = sqlx.Connect("postgres", conn); err != nil {
+	if db, err = sqlx.Connect(driver, dsn); err != nil {
 		return nil, err
 	}
 
