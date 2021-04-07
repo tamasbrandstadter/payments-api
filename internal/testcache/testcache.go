@@ -3,9 +3,9 @@ package testcache
 import (
 	"context"
 	"fmt"
-	"github.com/go-redis/cache/v8"
 	"time"
 
+	"github.com/go-redis/cache/v8"
 	"github.com/go-redis/redis/v8"
 	c "github.com/tamasbrandstadter/payments-api/internal/cache"
 )

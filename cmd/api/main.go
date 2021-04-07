@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -28,6 +31,7 @@ func main() {
 		User: envCfg.DBUser,
 		Pass: envCfg.DBPass,
 		Name: envCfg.DBName,
+		Host: envCfg.DBHost,
 		Port: envCfg.DBPort,
 	}
 	dbc, err := db.NewConnection(dbCfg)
@@ -96,17 +100,27 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
+	serverErrors := make(chan error, 1)
 	go func() {
 		log.Infof("server started successfully, listening on %s", server.Addr)
-		err = server.ListenAndServe()
-		if err != nil {
-			log.Errorf("server failed to start: %v", err)
-			return
-		}
+		serverErrors <- server.ListenAndServe()
 	}()
 
 	tc.StartConsuming(conn, dbc, redis)
 	go tc.ClosedConnectionListener(mqCfg, dbc, conn.Channel.NotifyClose(make(chan *amqp.Error)), redis)
+
+	// Blocking main and waiting for shutdown of the daemon.
+	osSignals := make(chan os.Signal, 1)
+	signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
+
+	// Waiting for an osSignal or a non-HTTP related server error.
+	select {
+	case e := <-serverErrors:
+		err = fmt.Errorf("server failed to start: %+v", e)
+		return
+
+	case <-osSignals:
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), envCfg.ShutdownTimeout)
 	defer cancel()

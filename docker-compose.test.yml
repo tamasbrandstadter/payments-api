@@ -25,6 +25,8 @@ services:
     command: redis-server --requirepass securepass
     ports:
       - 6379:6379
+    networks:
+      - payments-tests
   mq:
     image: rabbitmq:3.8.14-management
     container_name: mq
