@@ -13,6 +13,7 @@ const (
 	databaseUser = "root"
 	databasePass = "root"
 	databaseName = "testdb"
+	databaseHost = "db"
 	databasePort = 5432
 )
 
@@ -23,6 +24,7 @@ func Open() (*sqlx.DB, error) {
 		User: databaseUser,
 		Pass: databasePass,
 		Name: databaseName,
+		Host: databaseHost,
 		Port: databasePort,
 	})
 }

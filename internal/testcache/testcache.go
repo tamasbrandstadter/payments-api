@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	host = "localhost"
+	host = "redis"
 	pass = "securepass"
 	port = 6379
 )

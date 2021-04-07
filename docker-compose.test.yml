@@ -1,8 +1,26 @@
-version: '3.5'
+version: '3.9'
+
+networks:
+  payments-tests:
+    driver: bridge
 
 services:
+  payments_test:
+    container_name: payments_api
+    build:
+      context: .
+      dockerfile: ./deploy/Dockerfile.test
+    volumes:
+      - $PWD:/go/src/github.com/tamasbrandstadter/payments-api
+    depends_on:
+      - db
+      - mq
+      - redis
+    networks:
+      - payments-tests
   redis:
     image: redis:latest
+    hostname: redis
     container_name: redis
     command: redis-server --requirepass securepass
     ports:
@@ -10,11 +28,15 @@ services:
   mq:
     image: rabbitmq:3.8.14-management
     container_name: mq
+    hostname: mq
     ports:
       - 5672:5672
       - 15672:15672
+    networks:
+      - payments-tests
   db:
     image: postgres:latest
+    hostname: db
     container_name: db
     ports:
       - 5432:5432
@@ -25,3 +47,5 @@ services:
     restart: on-failure
     volumes:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - payments-tests

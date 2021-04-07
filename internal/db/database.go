@@ -14,6 +14,7 @@ type Config struct {
 	User string
 	Pass string
 	Name string
+	Host string
 	Port int
 }
 
@@ -21,8 +22,8 @@ func NewConnection(cfg Config) (*sqlx.DB, error) {
 	var db *sqlx.DB
 	var err error
 
-	conn := fmt.Sprintf("user=%s password=%s dbname=%s port=%d sslmode=disable",
-		cfg.User, cfg.Pass, cfg.Name, cfg.Port)
+	conn := fmt.Sprintf("user=%s password=%s dbname=%s host=%s, port=%d sslmode=disable",
+		cfg.User, cfg.Pass, cfg.Name, cfg.Host, cfg.Port)
 
 	log.Info("connecting to db")
 	if db, err = sqlx.Connect("postgres", conn); err != nil {

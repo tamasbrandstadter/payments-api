@@ -7,7 +7,7 @@ import (
 const (
 	user     = "guest"
 	password = "guest"
-	host     = "localhost"
+	host     = "mq"
 	port     = 5672
 	queue    = "test-queue"
 	exchange = "balance-notifications"
