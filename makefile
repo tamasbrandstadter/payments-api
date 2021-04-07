@@ -30,18 +30,18 @@ add-host:
 # Make sure minikube is started before running this
 kube-up:
 	kubectl create -f kubernetes/namespace.yaml
-	kubectl create -f deploy/postgres/deployment.yaml
-	kubectl create -f deploy/postgres/service.yaml
-#	kubectl create -f deploy/mq/deployment.yaml
-#	kubectl create -f deploy/mq/service.yaml
-#	kubectl create -f deploy/api/deployment.yaml
-#	kubectl create -f deploy/api/service.yaml
+	kubectl create -f deploy/db/secret.yaml
+	kubectl create -f deploy/db/configmap.yaml
+	kubectl create -f deploy/db/volume.yaml
+	kubectl create -f deploy/db/deployment.yaml
+	kubectl create -f deploy/db/service.yaml
 	kubectl create -f kubernetes/ingress.yaml
 
 kube-down:
+	kubectl delete -f deploy/db/service.yaml
+	kubectl delete -f deploy/db/deployment.yaml
+	kubectl delete -f deploy/db/volume.yaml
+	kubectl delete -f deploy/db/configmap.yaml
+	kubectl delete -f deploy/db/secret.yaml
 	kubectl delete -f kubernetes/ingress.yaml
-#	kubectl delete -f deploy/api/service.yaml
-#	kubectl delete -f deploy/api/deployment.yaml
-#	kubectl delete -f deploy/postgres/service.yaml
-#	kubectl delete -f deploy/postgres/deployment.yaml
 	kubectl delete -f kubernetes/namespace.yaml

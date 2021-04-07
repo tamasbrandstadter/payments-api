@@ -8,7 +8,9 @@ spec:
     - host: payments.example.com
       http:
         paths:
-          - backend:
+        - pathType: Exact
+          path: /
+          backend:
               service:
                 name: payments-api
                 port:
