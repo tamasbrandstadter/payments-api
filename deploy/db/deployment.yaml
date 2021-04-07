@@ -24,12 +24,15 @@ spec:
           envFrom:
             - secretRef:
                 name: postgres-secret
-            - configMapRef:
-                name: postgres-config
           volumeMounts:
-            - mountPath: /var/lib/postgresql/data
-              name: postgredb
+            - name: postgres-initdb
+              mountPath: /docker-entrypoint-initdb.d
+            - name: data
+              mountPath: /var/lib/postgresql/data
       volumes:
-        - name: postgredb
+        - name: postgres-initdb
+          configMap:
+            name: postgres-config
+        - name: data
           persistentVolumeClaim:
             claimName: postgres-pv-claim
