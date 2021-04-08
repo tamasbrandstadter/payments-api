@@ -4,14 +4,14 @@ metadata:
   namespace: payments
   name: rabbitmqcluster
 spec:
-  replicas: 3
+  replicas: 1
   resources:
     requests:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 300m
+      memory: 500Mi
     limits:
       cpu: 1
-      memory: 2Gi
+      memory: 1Gi
   rabbitmq:
     additionalConfig: |
       log.console.level = info

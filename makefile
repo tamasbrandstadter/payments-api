@@ -27,13 +27,12 @@ push:
 add-host:
 	echo "$$(minikube ip) payments.example.com" | sudo tee -a /etc/hosts
 
-# Make sure minikube is started before running this
-kube-up:
+# Make sure minikube is started before running these
+kube-infra-up:
 	kubectl apply -f kubernetes/namespace.yaml
 	kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml
-	timeout 15
+	kubectl apply -f deploy/mq/secret.yaml
 	kubectl apply -f deploy/mq/cluster.yaml
-	timeout 10
 	kubectl apply -f deploy/db/secret.yaml
 	kubectl apply -f deploy/db/configmap.yaml
 	kubectl apply -f deploy/db/volume.yaml
@@ -42,23 +41,27 @@ kube-up:
 	kubectl apply -f deploy/cache/secret.yaml
 	kubectl apply -f deploy/cache/deployment.yaml
 	kubectl apply -f deploy/cache/service.yaml
-	timeout 10
-	kubectl apply -f deploy/api/deployment.yaml
-	kubectl apply -f deploy/api/service.yaml
 	kubectl apply -f kubernetes/ingress.yaml
 
-kube-down:
+kube-api-up:
+	kubectl apply -f deploy/api/deployment.yaml
+	kubectl apply -f deploy/api/service.yaml
+
+kube-api-down:
+	kubectl delete -f deploy/api/service.yaml
+	kubectl delete -f deploy/api/deployment.yaml
+
+kube-infra-down:
 	kubectl delete -f deploy/db/service.yaml
 	kubectl delete -f deploy/db/deployment.yaml
 	kubectl delete -f deploy/db/volume.yaml
 	kubectl delete -f deploy/db/configmap.yaml
 	kubectl delete -f deploy/db/secret.yaml
+	kubectl delete -f deploy/mq/secret.yaml
 	kubectl delete -f deploy/mq/cluster.yaml
 	kubectl delete -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml
 	kubectl delete -f deploy/cache/service.yaml
 	kubectl delete -f deploy/cache/deployment.yaml
 	kubectl delete -f deploy/cache/secret.yaml
-	kubectl delete -f deploy/api/service.yaml
-	kubectl delete -f deploy/api/deployment.yaml
 	kubectl delete -f kubernetes/ingress.yaml
 	kubectl delete -f kubernetes/namespace.yaml

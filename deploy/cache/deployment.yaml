@@ -22,6 +22,7 @@ spec:
       containers:
         - name: master
           image: redis:latest
+          imagePullPolicy: IfNotPresent
           command: ["redis-server"]
           args: ["--requirepass", "securepass"]
           resources:
