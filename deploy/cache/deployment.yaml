@@ -22,8 +22,8 @@ spec:
       containers:
         - name: master
           image: redis:latest
-          command:
-            ["redis-server" "--requirepass" "securepass"]
+          command: ["redis-server"]
+          args: ["--requirepass", "securepass"]
           resources:
             requests:
               cpu: 100m

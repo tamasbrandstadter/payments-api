@@ -30,16 +30,19 @@ add-host:
 # Make sure minikube is started before running this
 kube-up:
 	kubectl apply -f kubernetes/namespace.yaml
+	kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml
+	timeout 15
+	kubectl apply -f deploy/mq/cluster.yaml
+	timeout 10
 	kubectl apply -f deploy/db/secret.yaml
 	kubectl apply -f deploy/db/configmap.yaml
 	kubectl apply -f deploy/db/volume.yaml
 	kubectl apply -f deploy/db/deployment.yaml
 	kubectl apply -f deploy/db/service.yaml
-	kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml
-	kubectl apply -f deploy/mq/cluster.yaml
 	kubectl apply -f deploy/cache/secret.yaml
 	kubectl apply -f deploy/cache/deployment.yaml
 	kubectl apply -f deploy/cache/service.yaml
+	timeout 10
 	kubectl apply -f deploy/api/deployment.yaml
 	kubectl apply -f deploy/api/service.yaml
 	kubectl apply -f kubernetes/ingress.yaml
