@@ -46,10 +46,12 @@ kube-infra-up:
 kube-api-up:
 	kubectl apply -f deploy/api/deployment.yaml
 	kubectl apply -f deploy/api/service.yaml
+	kubectl apply -f deploy/api/hpa.yaml
 
 kube-api-down:
 	kubectl delete -f deploy/api/service.yaml
 	kubectl delete -f deploy/api/deployment.yaml
+	kubectl delete -f deploy/api/hpa.yaml
 
 kube-infra-down:
 	kubectl delete -f deploy/db/service.yaml
