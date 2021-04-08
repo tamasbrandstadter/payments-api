@@ -29,13 +29,20 @@ add-host:
 
 # Make sure minikube is started before running this
 kube-up:
-	kubectl create -f kubernetes/namespace.yaml
-	kubectl create -f deploy/db/secret.yaml
-	kubectl create -f deploy/db/configmap.yaml
-	kubectl create -f deploy/db/volume.yaml
-	kubectl create -f deploy/db/deployment.yaml
-	kubectl create -f deploy/db/service.yaml
-	kubectl create -f kubernetes/ingress.yaml
+	kubectl apply -f kubernetes/namespace.yaml
+	kubectl apply -f deploy/db/secret.yaml
+	kubectl apply -f deploy/db/configmap.yaml
+	kubectl apply -f deploy/db/volume.yaml
+	kubectl apply -f deploy/db/deployment.yaml
+	kubectl apply -f deploy/db/service.yaml
+	kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml
+	kubectl apply -f deploy/mq/cluster.yaml
+	kubectl apply -f deploy/cache/secret.yaml
+	kubectl apply -f deploy/cache/deployment.yaml
+	kubectl apply -f deploy/cache/service.yaml
+	kubectl apply -f deploy/api/deployment.yaml
+	kubectl apply -f deploy/api/service.yaml
+	kubectl apply -f kubernetes/ingress.yaml
 
 kube-down:
 	kubectl delete -f deploy/db/service.yaml
@@ -43,5 +50,12 @@ kube-down:
 	kubectl delete -f deploy/db/volume.yaml
 	kubectl delete -f deploy/db/configmap.yaml
 	kubectl delete -f deploy/db/secret.yaml
+	kubectl delete -f deploy/mq/cluster.yaml
+	kubectl delete -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml
+	kubectl delete -f deploy/cache/service.yaml
+	kubectl delete -f deploy/cache/deployment.yaml
+	kubectl delete -f deploy/cache/secret.yaml
+	kubectl delete -f deploy/api/service.yaml
+	kubectl delete -f deploy/api/deployment.yaml
 	kubectl delete -f kubernetes/ingress.yaml
 	kubectl delete -f kubernetes/namespace.yaml

@@ -13,6 +13,7 @@ const (
 	accountById        = "/accounts/:id"
 	freezeAccount      = "/accounts/:id/freeze"
 	balanceByAccountId = "/accounts/:id/balance"
+	health             = "/health"
 )
 
 type Application struct {
@@ -32,6 +33,8 @@ func NewApplication(db *sqlx.DB, r *cache.Redis) *Application {
 	}
 
 	router := httprouter.New()
+
+	// API routes
 	router.HandlerFunc(http.MethodGet, accountById, app.GetAccountById)
 	router.HandlerFunc(http.MethodGet, accounts, app.FindAllAccounts)
 	router.HandlerFunc(http.MethodPost, accounts, app.CreateAccountForCustomer)
@@ -39,6 +42,23 @@ func NewApplication(db *sqlx.DB, r *cache.Redis) *Application {
 	router.HandlerFunc(http.MethodPut, freezeAccount, app.Freeze)
 	router.HandlerFunc(http.MethodGet, balanceByAccountId, app.GetBalance)
 
+	// K8s probes
+	router.HandlerFunc(http.MethodGet, health, app.health)
+
 	app.handler = router
 	return &app
+}
+
+func (a *Application) health(w http.ResponseWriter, _ *http.Request) {
+	if err := a.DB.Ping(); err == nil {
+		// Ping by itself is un-reliable, the connections are cached. This
+		// ensures that the database is still running by executing a harmless
+		// dummy query against it.
+		if _, err = a.DB.Exec("SELECT true"); err == nil {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusInternalServerError)
 }
