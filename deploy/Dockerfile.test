@@ -1,0 +1,19 @@
+FROM golang:1.16.3-alpine
+
+ENV CGO_ENABLED 0
+
+# Install git
+RUN set -ex; \
+    apk update; \
+    apk add --no-cache git; \
+    apk add --no-cache bash;
+
+# Set working directory
+WORKDIR /go/src/github.com/tamasbrandstadter/payments-api/
+
+COPY wait-for-it.sh ./wait-for-it.sh
+
+RUN chmod +x ./wait-for-it.sh
+
+# Run tests
+ENTRYPOINT ["./wait-for-it.sh","mq:5672","-t","0","--","go","test","./..."]
