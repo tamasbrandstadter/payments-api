@@ -75,11 +75,11 @@ topic for notifying the customer also asynchronously.
 * Kubernetes descriptor YAML files can be found in `deploy` and `kubernetes` folders.
 
 * If you want to deploy, then follow these steps:
-- `minikube start --memory=6g —cpus=2` (start k8s cluster)
-- `make add-host` (DNS entry for ingress)
-- `make kube-infra-up` (this will apply infra descriptors)
-- `make kube-api-up` (this will apply API descriptors)
-- `minikube service payments-api --url -n payments` (public IP assigning)
+  - `minikube start --memory=6g —cpus=2` (start k8s cluster)
+  - `make add-host` (DNS entry for ingress)
+  - `make kube-infra-up` (this will apply infra descriptors)
+  - `make kube-api-up` (this will apply API descriptors)
+  - `minikube service payments-api --url -n payments` (public IP assigning)
 
 * Note this issue if you encounter problems in volume mounting for database container starts: [minikube#4634](https://github.com/kubernetes/minikube/issues/4634)
 
