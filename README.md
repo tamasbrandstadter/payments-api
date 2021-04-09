@@ -1,8 +1,7 @@
 # Payments API
-
 This application is created for managing financial accounts in payments solutions.
 
-REST API endpoints are exposed for:
+Available operations:
 - Opening accounts (creating new accounts for customers)
 - Listing accounts
 - Get an account by id
@@ -20,11 +19,13 @@ The application also handles financial transactions in async and concurrent mann
 - Message broker: `RabbitMQ`
 - Database: `PostgreSQL`
 - Cache: `Redis`
-- Containerization: `Docker`
+- Containerisation: `Docker`
 - Container orchestrator: `Kubernetes`, `minikube`
 - Integration test and local development setup: `docker-compose`
 
-Customers, accounts and transactions are stored in the database.
+## Workflow
+Customers, accounts and transactions are stored in the database. REST API is created and publicly exposed for CRUD operations with
+stored records.
 
 The message broker is responsible for routing incoming deposit, withdraw and transfer messages, which will be consumed by the
 application from their dedicated queues. The balance will be updated in the database and in the cache. 
@@ -33,9 +34,13 @@ Database transactions are enabled on different isolation levels, in case of an e
 If a transaction is successful an audit record will be saved to the database, and an event will be sent to the corresponding
 topic for notifying the customer also asynchronously.
 
+## Architectural diagram
+![Alt text](./diagram.svg)
+<img src="./diagram.svg">
+
 ## Running locally
 * The project uses `go`, therefore you must install it first on your local machine if you want to develop the
-  application.
+  application. Also install `Docker` if you don't have it locally.
 
 * If you want to run the application locally simply execute `make up` in the project root folder. 
   Docker-compose will start the database, message broker, cache containers.
@@ -61,12 +66,12 @@ topic for notifying the customer also asynchronously.
 
 * You can check the published messages on management console via `http://localhost:15672/`.
 
-* You can check reach the `database on port 5432`. `Cache` is reachable on port `6379`.
+* You can reach the `database on port 5432`. `Cache` is reachable on port `6379`.
 
 * If you want to build a Docker image use `make tag` (and optionally `make push`).
 
 ## Deployment
-* This application deployed to a Kubernetes cluster with minikube (install it if you don't have it locally).
+* This application and the underlying infrastructure deployed to a Kubernetes cluster. Install `minikube` if you don't have it locally.
 
 * Kubernetes descriptor YAML files can be found in `deploy` and `kubernetes` folders.
 
@@ -77,11 +82,11 @@ topic for notifying the customer also asynchronously.
 - `make kube-api-up` (this will apply API descriptors)
 - `minikube service payments-api --url -n payments` (public IP assigning)
 
-* Note this issue if you encounter problems in volume mounting for database container starts: https://github.com/kubernetes/minikube/issues/4634 
+* Note this issue if you encounter problems in volume mounting for database container starts: [minikube#4634](https://github.com/kubernetes/minikube/issues/4634)
 
 * Optionally use `minikube tunnel` if you want to check the management console for the message broker.
 
 ### Testing
 * Unit and integration tests are implemented as part of the project.
 
-* To run them use `make test`. This will create the test Docker containers and run the integration tests against them.
+* To run them execute `make test`. This will create the test Docker containers and run the integration tests against them.
