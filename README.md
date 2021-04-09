@@ -36,7 +36,6 @@ topic for notifying the customer also asynchronously.
 
 ## Architectural diagram
 ![Alt text](./diagram.svg)
-<img src="./diagram.svg">
 
 ## Running locally
 * The project uses `go`, therefore you must install it first on your local machine if you want to develop the
