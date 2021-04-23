@@ -18,10 +18,10 @@ test:
 	docker-compose -f docker-compose.test.yml down --volumes
 
 tag:
-	docker build -t payments-api:1.0 -f deploy/Dockerfile .
+	docker build -t payments-api:1.0.0 -f deploy/Dockerfile .
 
 push:
-	docker push tamasbrandstadter/payments-api:1.0
+	docker push tamasbrandstadter/payments-api:1.0.0
 
 # Add payments.example.com as a host for the ingress resource
 add-host:
@@ -47,6 +47,16 @@ kube-api-up:
 	kubectl apply -f deploy/api/deployment.yaml
 	kubectl apply -f deploy/api/service.yaml
 	kubectl apply -f deploy/api/hpa.yaml
+
+mesh:
+	curl https://run.linkerd.io/install | sh
+	linkerd install | kubectl apply -f -
+	linkerd check
+	linkerd viz install | kubectl apply -f -
+	linkerd jaeger install | kubectl apply -f -
+	linkerd check
+	kubectl get -n payments statefulset -o yaml | linkerd inject - | kubectl apply -f -
+	kubectl get -n payments deploy -o yaml | linkerd inject - | kubectl apply -f -
 
 kube-api-down:
 	kubectl delete -f deploy/api/service.yaml

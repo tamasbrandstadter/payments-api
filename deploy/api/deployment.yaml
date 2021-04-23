@@ -1,3 +1,9 @@
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: payments-api
+  namespace: payments
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,6 +27,7 @@ spec:
       labels:
         app: payments-api
     spec:
+      serviceAccountName: payments-api
       terminationGracePeriodSeconds: 30
       containers:
         - name: payments-api

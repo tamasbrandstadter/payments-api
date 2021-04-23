@@ -2,7 +2,7 @@ FROM golang:1.16.3-alpine
 
 ENV CGO_ENABLED 0
 
-# Install git
+# Install git and bash
 RUN set -ex; \
     apk update; \
     apk add --no-cache git; \
