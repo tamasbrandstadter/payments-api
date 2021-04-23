@@ -21,6 +21,7 @@ The application also handles financial transactions in async and concurrent mann
 - Cache: `Redis`
 - Containerisation: `Docker`
 - Container orchestrator: `Kubernetes`, `minikube`
+- Service mesh: `Linkerd`
 - Integration test and local development setup: `docker-compose`
 
 ## Workflow
@@ -67,7 +68,7 @@ topic for notifying the customer also asynchronously.
 
 * You can reach the `database on port 5432`. `Cache` is reachable on port `6379`.
 
-* If you want to build a Docker image use `make tag` (and optionally `make push`).
+* If you want to build a Docker image execute `make tag` (and optionally `make push`).
 
 ## Deployment
 * This application and the underlying infrastructure deployed to a Kubernetes cluster. Install `minikube` if you don't have it locally.
@@ -83,7 +84,13 @@ topic for notifying the customer also asynchronously.
 
 * Note this issue if you encounter problems in volume mounting for database container starts: [minikube#4634](https://github.com/kubernetes/minikube/issues/4634)
 
-* Optionally use `minikube tunnel` if you want to check the management console for the message broker.
+* Optionally execute `minikube tunnel` if you want to check the management console for the message broker.
+
+## Service mesh
+* If you want to mesh the services use `make mesh`. This command will install Linkerd and its extensions (Jaeger and viz)
+and then inject the sidecar proxy containers. 
+  
+* You can view the dashboard by executing `linkerd viz dashboard &`. 
 
 ### Testing
 * Unit and integration tests are implemented as part of the project.
